@@ -1,9 +1,15 @@
+import axios from 'axios';
 import axiosClient from './axiosClient';
 
 const q = (params = {}) => ({ params });
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
 export const authApi = {
-  login: (payload) => axiosClient.post('/auth/login', payload),
+  getCsrfCookie: () => axios.get(`${API_BASE}/sanctum/csrf-cookie`, { withCredentials: true }),
+  login: async (payload) => {
+    await authApi.getCsrfCookie();
+    return axiosClient.post('/auth/login', payload);
+  },
   profile: () => axiosClient.get('/auth/profile'),
   logout: () => axiosClient.post('/auth/logout'),
 };
