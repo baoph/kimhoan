@@ -25,9 +25,11 @@ export default function LoginPage() {
           validationSchema={schema}
           onSubmit={async (values, { setSubmitting }) => {
             try {
+              console.info('[LoginPage] Submit login payload for:', values.email);
               await login(values);
               navigate('/');
             } catch (error) {
+              console.error('[LoginPage] Login failed:', error?.response?.data || error.message);
               toast.error(error.response?.data?.message || 'Đăng nhập thất bại');
             } finally {
               setSubmitting(false);

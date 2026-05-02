@@ -2,13 +2,33 @@ import axios from 'axios';
 import axiosClient from './axiosClient';
 
 const q = (params = {}) => ({ params });
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+
+const API_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const API_BASE = (
+  import.meta.env.VITE_API_BASE
+  || (API_URL.includes('/api') ? API_URL.split('/api')[0] : API_URL)
+  || 'http://localhost:8000'
+).replace(/\/$/, '');
 
 export const authApi = {
-  getCsrfCookie: () => axios.get(`${API_BASE}/sanctum/csrf-cookie`, { withCredentials: true }),
+  getCsrfCookie: async () => {
+    const csrfUrl = `${API_BASE}/sanctum/csrf-cookie`;
+    console.info('[authApi] Fetching CSRF cookie:', csrfUrl);
+
+    return axios.get(csrfUrl, {
+      withCredentials: true,
+      headers: {
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+  },
   login: async (payload) => {
     await authApi.getCsrfCookie();
-    return axiosClient.post('/auth/login', payload);
+
+    return axiosClient.post('/auth/login', payload, {
+      withCredentials: true,
+    });
   },
   profile: () => axiosClient.get('/auth/profile'),
   logout: () => axiosClient.post('/auth/logout'),

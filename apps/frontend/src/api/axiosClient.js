@@ -2,6 +2,22 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
+const getCookieValue = (cookieName) => {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const cookie = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(`${cookieName}=`));
+
+  if (!cookie) {
+    return null;
+  }
+
+  return decodeURIComponent(cookie.split('=')[1]);
+};
+
 const axiosClient = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -13,10 +29,20 @@ const axiosClient = axios.create({
 });
 
 axiosClient.interceptors.request.use((config) => {
+  config.withCredentials = true;
+  config.headers = config.headers || {};
+  config.headers['X-Requested-With'] = 'XMLHttpRequest';
+
   const token = localStorage.getItem('auth_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  const csrfToken = getCookieValue('XSRF-TOKEN');
+  if (csrfToken) {
+    config.headers['X-XSRF-TOKEN'] = csrfToken;
+  }
+
   return config;
 });
 
