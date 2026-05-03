@@ -20,7 +20,11 @@ class PurchaseOrderController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = PurchaseOrder::query()->with(['warehouse', 'supplier', 'creator']);
+            $warehouseId = (int) getCurrentWarehouseId();
+
+            $query = PurchaseOrder::query()
+                ->with(['warehouse', 'supplier', 'creator'])
+                ->where('warehouse_id', $warehouseId);
 
             if ($search = $request->string('search')->toString()) {
                 $query->where('po_code', 'like', "%{$search}%");
@@ -28,10 +32,6 @@ class PurchaseOrderController extends Controller
 
             if ($status = $request->input('status')) {
                 $query->where('status', $status);
-            }
-
-            if ($warehouseId = $request->input('warehouse_id')) {
-                $query->where('warehouse_id', $warehouseId);
             }
 
             if ($supplierId = $request->input('supplier_id')) {
@@ -49,7 +49,9 @@ class PurchaseOrderController extends Controller
     public function store(StorePurchaseOrderRequest $request)
     {
         try {
-            $purchaseOrder = DB::transaction(function () use ($request) {
+            $warehouseId = (int) getCurrentWarehouseId();
+
+            $purchaseOrder = DB::transaction(function () use ($request, $warehouseId) {
                 $data = $request->validated();
                 $items = $data['items'];
                 unset($data['items']);
@@ -60,6 +62,8 @@ class PurchaseOrderController extends Controller
                     ]);
                 }
 
+                // Global warehouse context: kho lấy từ header, không lấy từ body.
+                $data['warehouse_id'] = $warehouseId;
                 $data['po_code'] = $this->generatePoCode($data['order_date']);
                 $data['created_by'] = $request->user()->id;
                 $data['total_amount'] = $this->calculateTotalAmount($items);
@@ -83,9 +87,13 @@ class PurchaseOrderController extends Controller
         }
     }
 
-    public function show(PurchaseOrder $purchaseOrder)
+    public function show(Request $request, PurchaseOrder $purchaseOrder)
     {
         try {
+            if ($response = $this->ensurePurchaseOrderInWarehouse($request, $purchaseOrder)) {
+                return $response;
+            }
+
             return $this->successResponse(
                 $purchaseOrder->load(['warehouse', 'supplier', 'creator', 'items.product']),
                 'Lấy chi tiết phiếu nhập thành công'
@@ -98,6 +106,10 @@ class PurchaseOrderController extends Controller
     public function update(UpdatePurchaseOrderRequest $request, PurchaseOrder $purchaseOrder)
     {
         try {
+            if ($response = $this->ensurePurchaseOrderInWarehouse($request, $purchaseOrder)) {
+                return $response;
+            }
+
             if (in_array($purchaseOrder->status, ['completed', 'cancelled'], true)) {
                 return $this->errorResponse('Chỉ có thể cập nhật phiếu nhập ở trạng thái draft/pending', [], 422);
             }
@@ -120,6 +132,9 @@ class PurchaseOrderController extends Controller
                     $data['total_amount'] = $this->calculateTotalAmount($items);
                 }
 
+                // Không cho phép thay đổi kho từ request body.
+                unset($data['warehouse_id']);
+
                 $purchaseOrder->update($data);
             });
 
@@ -134,9 +149,13 @@ class PurchaseOrderController extends Controller
         }
     }
 
-    public function destroy(PurchaseOrder $purchaseOrder)
+    public function destroy(Request $request, PurchaseOrder $purchaseOrder)
     {
         try {
+            if ($response = $this->ensurePurchaseOrderInWarehouse($request, $purchaseOrder)) {
+                return $response;
+            }
+
             if ($purchaseOrder->status !== 'draft') {
                 return $this->errorResponse('Chỉ được xóa phiếu nhập ở trạng thái draft', [], 422);
             }
@@ -155,9 +174,13 @@ class PurchaseOrderController extends Controller
     /**
      * Hoàn thành phiếu nhập: cộng tồn kho theo kho + tổng tồn sản phẩm + ghi nhận transaction nhập hàng.
      */
-    public function complete(PurchaseOrder $purchaseOrder)
+    public function complete(Request $request, PurchaseOrder $purchaseOrder)
     {
         try {
+            if ($response = $this->ensurePurchaseOrderInWarehouse($request, $purchaseOrder)) {
+                return $response;
+            }
+
             if (! in_array($purchaseOrder->status, ['draft', 'pending'], true)) {
                 return $this->errorResponse('Chỉ có thể hoàn thành phiếu nhập ở trạng thái draft/pending', [], 422);
             }
@@ -180,6 +203,7 @@ class PurchaseOrderController extends Controller
                     $product->increment('stock_quantity', $item->quantity);
 
                     InventoryTransaction::create([
+                        'warehouse_id' => $purchaseOrder->warehouse_id,
                         'product_id' => $item->product_id,
                         'transaction_type' => 'purchase',
                         'quantity' => $item->quantity,
@@ -200,9 +224,13 @@ class PurchaseOrderController extends Controller
     /**
      * Hủy phiếu nhập đã hoàn thành: trừ tồn kho, trừ tổng tồn và ghi transaction hủy nhập.
      */
-    public function cancel(PurchaseOrder $purchaseOrder)
+    public function cancel(Request $request, PurchaseOrder $purchaseOrder)
     {
         try {
+            if ($response = $this->ensurePurchaseOrderInWarehouse($request, $purchaseOrder)) {
+                return $response;
+            }
+
             if ($purchaseOrder->status === 'cancelled') {
                 return $this->errorResponse('Phiếu nhập đã ở trạng thái hủy', [], 422);
             }
@@ -236,6 +264,7 @@ class PurchaseOrderController extends Controller
                         $product->decrement('stock_quantity', $item->quantity);
 
                         InventoryTransaction::create([
+                            'warehouse_id' => $purchaseOrder->warehouse_id,
                             'product_id' => $item->product_id,
                             'transaction_type' => 'purchase_cancel',
                             'quantity' => -$item->quantity,
@@ -254,6 +283,17 @@ class PurchaseOrderController extends Controller
         } catch (Throwable $e) {
             return $this->errorResponse('Không thể hủy phiếu nhập', ['error' => $e->getMessage()], 500);
         }
+    }
+
+    private function ensurePurchaseOrderInWarehouse(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        $warehouseId = (int) ($request->input('current_warehouse_id') ?? getCurrentWarehouseId());
+
+        if ((int) $purchaseOrder->warehouse_id !== $warehouseId) {
+            return $this->errorResponse('Bạn không có quyền thao tác phiếu nhập của kho khác', [], 403);
+        }
+
+        return null;
     }
 
     private function syncItems(PurchaseOrder $purchaseOrder, array $items): void

@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Customer;
 use App\Models\CustomerGroup;
 use App\Models\User;
+use App\Models\Warehouse;
 use Illuminate\Database\Seeder;
 
 class CustomerSeeder extends Seeder
@@ -12,8 +13,13 @@ class CustomerSeeder extends Seeder
     public function run(): void
     {
         $groupIds = CustomerGroup::query()->pluck('id')->all();
+        $defaultWarehouseId = Warehouse::query()->orderBy('id')->value('id');
         $staffId = User::query()->where('role', 'staff')->value('id')
             ?? User::query()->value('id');
+
+        if (! $defaultWarehouseId) {
+            return;
+        }
 
         $customers = [
             ['customer_code' => 'KH000022', 'name' => 'VĂN NGÂN,HÀ NỘI', 'phone1' => '0912000022'],
@@ -42,6 +48,7 @@ class CustomerSeeder extends Seeder
                     'birth_date' => now()->subYears(25 + $index)->toDateString(),
                     'customer_group_id' => $groupIds[$index % max(count($groupIds), 1)] ?? null,
                     'notes' => null,
+                    'warehouse_id' => $defaultWarehouseId,
                     'created_by' => $staffId,
                 ]
             );

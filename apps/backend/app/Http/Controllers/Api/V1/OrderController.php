@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Order\StoreOrderRequest;
 use App\Http\Requests\Order\UpdateOrderRequest;
+use App\Models\Customer;
 use App\Models\InventoryTransaction;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\WarehouseStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -17,7 +19,11 @@ class OrderController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Order::query()->with(['customer', 'staff']);
+        $warehouseId = (int) getCurrentWarehouseId();
+
+        $query = Order::query()
+            ->with(['customer', 'staff'])
+            ->where('warehouse_id', $warehouseId);
 
         if ($search = $request->string('search')->toString()) {
             $query->where('order_code', 'like', "%{$search}%");
@@ -39,12 +45,15 @@ class OrderController extends Controller
 
     public function store(StoreOrderRequest $request)
     {
-        $order = DB::transaction(function () use ($request) {
+        $warehouseId = (int) getCurrentWarehouseId();
+
+        $order = DB::transaction(function () use ($request, $warehouseId) {
             $data = $request->validated();
             $items = $data['items'];
             unset($data['items']);
 
-            $this->ensureStockAvailability($items);
+            $this->ensureCustomerInWarehouse($data['customer_id'] ?? null, $warehouseId);
+            $this->ensureStockAvailability($items, $warehouseId);
 
             $totalAmount = 0;
             foreach ($items as $item) {
@@ -53,6 +62,7 @@ class OrderController extends Controller
             }
 
             $discount = $data['discount'] ?? 0;
+            $data['warehouse_id'] = $warehouseId;
             $data['total_amount'] = $totalAmount;
             $data['final_amount'] = max($totalAmount - $discount, 0);
             $data['staff_id'] = $data['staff_id'] ?? $request->user()?->id;
@@ -60,7 +70,7 @@ class OrderController extends Controller
             $order = Order::create($data);
 
             foreach ($items as $item) {
-                $product = Product::findOrFail($item['product_id']);
+                $product = Product::query()->lockForUpdate()->findOrFail($item['product_id']);
                 $unitPrice = $item['unit_price'] ?? $product->selling_price;
                 $lineTotal = $unitPrice * $item['quantity'];
 
@@ -71,12 +81,18 @@ class OrderController extends Controller
                     'total_price' => $lineTotal,
                 ]);
 
+                WarehouseStock::query()
+                    ->where('warehouse_id', $warehouseId)
+                    ->where('product_id', $product->id)
+                    ->decrement('quantity', $item['quantity']);
+
                 $product->decrement('stock_quantity', $item['quantity']);
 
                 InventoryTransaction::create([
+                    'warehouse_id' => $warehouseId,
                     'product_id' => $product->id,
-                    'transaction_type' => 'export',
-                    'quantity' => $item['quantity'],
+                    'transaction_type' => 'sale',
+                    'quantity' => -$item['quantity'],
                     'reference_id' => $order->id,
                     'notes' => 'Xuất kho từ đơn hàng '.$order->order_code,
                 ]);
@@ -86,37 +102,48 @@ class OrderController extends Controller
         });
 
         return $this->successResponse(
-            $order->load(['customer', 'staff', 'orderItems.product']),
+            $order->load(['customer', 'staff', 'orderItems.product', 'warehouse']),
             'Tạo đơn hàng thành công',
             201
         );
     }
 
-    public function show(Order $order)
+    public function show(Request $request, Order $order)
     {
+        if ($response = $this->ensureOrderInWarehouse($request, $order)) {
+            return $response;
+        }
+
         return $this->successResponse(
-            $order->load(['customer', 'staff', 'orderItems.product']),
+            $order->load(['customer', 'staff', 'orderItems.product', 'warehouse']),
             'Lấy chi tiết đơn hàng thành công'
         );
     }
 
     public function update(UpdateOrderRequest $request, Order $order)
     {
+        if ($response = $this->ensureOrderInWarehouse($request, $order)) {
+            return $response;
+        }
+
         DB::transaction(function () use ($request, $order) {
             $data = $request->validated();
+            $warehouseId = (int) getCurrentWarehouseId();
+
+            $this->ensureCustomerInWarehouse($data['customer_id'] ?? $order->customer_id, $warehouseId);
 
             if (isset($data['items'])) {
                 $items = $data['items'];
                 unset($data['items']);
 
                 $this->restoreStock($order);
-                $this->ensureStockAvailability($items);
+                $this->ensureStockAvailability($items, $warehouseId);
 
                 $order->orderItems()->delete();
 
                 $totalAmount = 0;
                 foreach ($items as $item) {
-                    $product = Product::findOrFail($item['product_id']);
+                    $product = Product::query()->lockForUpdate()->findOrFail($item['product_id']);
                     $unitPrice = $item['unit_price'] ?? $product->selling_price;
                     $lineTotal = $unitPrice * $item['quantity'];
                     $totalAmount += $lineTotal;
@@ -128,12 +155,18 @@ class OrderController extends Controller
                         'total_price' => $lineTotal,
                     ]);
 
+                    WarehouseStock::query()
+                        ->where('warehouse_id', $warehouseId)
+                        ->where('product_id', $product->id)
+                        ->decrement('quantity', $item['quantity']);
+
                     $product->decrement('stock_quantity', $item['quantity']);
 
                     InventoryTransaction::create([
+                        'warehouse_id' => $warehouseId,
                         'product_id' => $product->id,
-                        'transaction_type' => 'export',
-                        'quantity' => $item['quantity'],
+                        'transaction_type' => 'sale',
+                        'quantity' => -$item['quantity'],
                         'reference_id' => $order->id,
                         'notes' => 'Điều chỉnh xuất kho từ đơn hàng '.$order->order_code,
                     ]);
@@ -144,17 +177,24 @@ class OrderController extends Controller
                 $data['final_amount'] = max($totalAmount - $discount, 0);
             }
 
+            // Không cho phép thay đổi kho trực tiếp từ request body.
+            unset($data['warehouse_id']);
+
             $order->update($data);
         });
 
         return $this->successResponse(
-            $order->fresh()->load(['customer', 'staff', 'orderItems.product']),
+            $order->fresh()->load(['customer', 'staff', 'orderItems.product', 'warehouse']),
             'Cập nhật đơn hàng thành công'
         );
     }
 
-    public function destroy(Order $order)
+    public function destroy(Request $request, Order $order)
     {
+        if ($response = $this->ensureOrderInWarehouse($request, $order)) {
+            return $response;
+        }
+
         DB::transaction(function () use ($order) {
             $this->restoreStock($order);
             $order->delete();
@@ -165,6 +205,10 @@ class OrderController extends Controller
 
     public function updateStatus(Request $request, Order $order)
     {
+        if ($response = $this->ensureOrderInWarehouse($request, $order)) {
+            return $response;
+        }
+
         $validator = Validator::make(
             $request->all(),
             [
@@ -190,15 +234,55 @@ class OrderController extends Controller
         return $this->successResponse($order, 'Cập nhật trạng thái đơn hàng thành công');
     }
 
+    private function ensureOrderInWarehouse(Request $request, Order $order)
+    {
+        $warehouseId = (int) ($request->input('current_warehouse_id') ?? getCurrentWarehouseId());
+
+        if ((int) $order->warehouse_id !== $warehouseId) {
+            return $this->errorResponse('Bạn không có quyền thao tác đơn hàng của kho khác', [], 403);
+        }
+
+        return null;
+    }
+
+    private function ensureCustomerInWarehouse(?int $customerId, int $warehouseId): void
+    {
+        if (! $customerId) {
+            return;
+        }
+
+        $isValidCustomer = Customer::query()
+            ->whereKey($customerId)
+            ->where('warehouse_id', $warehouseId)
+            ->exists();
+
+        if (! $isValidCustomer) {
+            throw ValidationException::withMessages([
+                'customer_id' => ['Khách hàng không thuộc kho đang thao tác.'],
+            ]);
+        }
+    }
+
     private function restoreStock(Order $order): void
     {
+        $order->loadMissing('orderItems.product');
+
         foreach ($order->orderItems as $item) {
+            WarehouseStock::query()->firstOrCreate(
+                [
+                    'warehouse_id' => $order->warehouse_id,
+                    'product_id' => $item->product_id,
+                ],
+                ['quantity' => 0]
+            )->increment('quantity', $item->quantity);
+
             $item->product?->increment('stock_quantity', $item->quantity);
 
             if ($item->product_id) {
                 InventoryTransaction::create([
+                    'warehouse_id' => $order->warehouse_id,
                     'product_id' => $item->product_id,
-                    'transaction_type' => 'return',
+                    'transaction_type' => 'sale_return',
                     'quantity' => $item->quantity,
                     'reference_id' => $order->id,
                     'notes' => 'Hoàn kho khi cập nhật/xóa đơn '.$order->order_code,
@@ -208,16 +292,29 @@ class OrderController extends Controller
     }
 
     /**
-     * Không cho phép bán âm kho theo business flow.
+     * Không cho phép bán âm kho theo business flow tại kho hiện tại.
      */
-    private function ensureStockAvailability(array $items): void
+    private function ensureStockAvailability(array $items, int $warehouseId): void
     {
         foreach ($items as $item) {
             $product = Product::query()->findOrFail($item['product_id']);
 
-            if ($product->stock_quantity < $item['quantity']) {
+            $stock = WarehouseStock::query()
+                ->where('warehouse_id', $warehouseId)
+                ->where('product_id', $item['product_id'])
+                ->lockForUpdate()
+                ->first();
+
+            $currentWarehouseQty = (int) ($stock->quantity ?? 0);
+            if ($currentWarehouseQty < $item['quantity']) {
                 throw ValidationException::withMessages([
-                    'items' => ["Sản phẩm {$product->name} không đủ tồn kho. Tồn hiện tại: {$product->stock_quantity}"],
+                    'items' => ["Sản phẩm {$product->name} không đủ tồn kho tại kho hiện tại. Tồn: {$currentWarehouseQty}"],
+                ]);
+            }
+
+            if ((int) $product->stock_quantity < $item['quantity']) {
+                throw ValidationException::withMessages([
+                    'items' => ["Sản phẩm {$product->name} không đủ tổng tồn kho hệ thống. Tồn: {$product->stock_quantity}"],
                 ]);
             }
         }

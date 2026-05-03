@@ -2,17 +2,18 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class Customer extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'warehouse_id',
         'customer_code',
         'name',
         'phone1',
@@ -34,6 +35,11 @@ class Customer extends Model
         return [
             'birth_date' => 'date',
         ];
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
     }
 
     public function customerGroup(): BelongsTo

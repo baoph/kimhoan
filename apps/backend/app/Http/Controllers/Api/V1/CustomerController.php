@@ -12,7 +12,11 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Customer::query()->with(['customerGroup', 'creator']);
+        $warehouseId = (int) getCurrentWarehouseId();
+
+        $query = Customer::query()
+            ->with(['customerGroup', 'creator'])
+            ->where('warehouse_id', $warehouseId);
 
         if ($search = $request->string('search')->toString()) {
             $query->where(function ($q) use ($search) {
@@ -36,38 +40,65 @@ class CustomerController extends Controller
     public function store(StoreCustomerRequest $request)
     {
         $customer = Customer::create($request->validated() + [
+            'warehouse_id' => getCurrentWarehouseId(),
             'created_by' => $request->user()?->id,
         ]);
 
         return $this->successResponse(
-            $customer->load(['customerGroup', 'creator']),
+            $customer->load(['customerGroup', 'creator', 'warehouse']),
             'Tạo khách hàng thành công',
             201
         );
     }
 
-    public function show(Customer $customer)
+    public function show(Request $request, Customer $customer)
     {
+        if ($response = $this->ensureCustomerInWarehouse($request, $customer)) {
+            return $response;
+        }
+
         return $this->successResponse(
-            $customer->load(['customerGroup', 'creator', 'orders']),
+            $customer->load(['customerGroup', 'creator', 'orders', 'warehouse']),
             'Lấy chi tiết khách hàng thành công'
         );
     }
 
     public function update(UpdateCustomerRequest $request, Customer $customer)
     {
-        $customer->update($request->validated());
+        if ($response = $this->ensureCustomerInWarehouse($request, $customer)) {
+            return $response;
+        }
+
+        $data = $request->validated();
+        unset($data['warehouse_id']);
+
+        $customer->update($data);
 
         return $this->successResponse(
-            $customer->load(['customerGroup', 'creator']),
+            $customer->load(['customerGroup', 'creator', 'warehouse']),
             'Cập nhật khách hàng thành công'
         );
     }
 
-    public function destroy(Customer $customer)
+    public function destroy(Request $request, Customer $customer)
     {
+        if ($response = $this->ensureCustomerInWarehouse($request, $customer)) {
+            return $response;
+        }
+
         $customer->delete();
 
         return $this->successResponse(null, 'Xóa khách hàng thành công');
+    }
+
+    private function ensureCustomerInWarehouse(Request $request, Customer $customer)
+    {
+        $warehouseId = (int) ($request->input('current_warehouse_id') ?? getCurrentWarehouseId());
+
+        if ((int) $customer->warehouse_id !== $warehouseId) {
+            return $this->errorResponse('Bạn không có quyền thao tác khách hàng của kho khác', [], 403);
+        }
+
+        return null;
     }
 }

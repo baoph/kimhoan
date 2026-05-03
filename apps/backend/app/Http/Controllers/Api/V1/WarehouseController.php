@@ -46,9 +46,13 @@ class WarehouseController extends Controller
         }
     }
 
-    public function show(Warehouse $warehouse)
+    public function show(Request $request, Warehouse $warehouse)
     {
         try {
+            if ($response = $this->ensureWarehouseInContext($request, $warehouse)) {
+                return $response;
+            }
+
             return $this->successResponse($warehouse, 'Lấy chi tiết kho thành công');
         } catch (Throwable $e) {
             return $this->errorResponse('Không thể lấy chi tiết kho', ['error' => $e->getMessage()], 500);
@@ -58,6 +62,10 @@ class WarehouseController extends Controller
     public function update(UpdateWarehouseRequest $request, Warehouse $warehouse)
     {
         try {
+            if ($response = $this->ensureWarehouseInContext($request, $warehouse)) {
+                return $response;
+            }
+
             $warehouse->update($request->validated());
 
             return $this->successResponse($warehouse->fresh(), 'Cập nhật kho thành công');
@@ -66,9 +74,13 @@ class WarehouseController extends Controller
         }
     }
 
-    public function destroy(Warehouse $warehouse)
+    public function destroy(Request $request, Warehouse $warehouse)
     {
         try {
+            if ($response = $this->ensureWarehouseInContext($request, $warehouse)) {
+                return $response;
+            }
+
             $warehouse->delete();
 
             return $this->successResponse(null, 'Xóa kho thành công');
@@ -80,6 +92,10 @@ class WarehouseController extends Controller
     public function stock(Warehouse $warehouse, Request $request)
     {
         try {
+            if ($response = $this->ensureWarehouseInContext($request, $warehouse)) {
+                return $response;
+            }
+
             $stocks = $warehouse->warehouseStocks()
                 ->with('product')
                 ->when($request->string('search')->toString(), function ($query, $search) {
@@ -95,5 +111,16 @@ class WarehouseController extends Controller
         } catch (Throwable $e) {
             return $this->errorResponse('Không thể lấy tồn kho theo kho', ['error' => $e->getMessage()], 500);
         }
+    }
+
+    private function ensureWarehouseInContext(Request $request, Warehouse $warehouse)
+    {
+        $warehouseId = (int) ($request->input('current_warehouse_id') ?? getCurrentWarehouseId());
+
+        if ((int) $warehouse->id !== $warehouseId) {
+            return $this->errorResponse('Bạn không có quyền thao tác dữ liệu kho khác với kho đang chọn', [], 403);
+        }
+
+        return null;
     }
 }

@@ -12,7 +12,13 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Product::query()->with(['category', 'brand']);
+        $warehouseId = (int) getCurrentWarehouseId();
+
+        $query = Product::query()->with([
+            'category',
+            'brand',
+            'warehouseStocks' => fn ($q) => $q->where('warehouse_id', $warehouseId),
+        ]);
 
         if ($search = $request->string('search')->toString()) {
             $query->where(function ($q) use ($search) {
@@ -31,23 +37,37 @@ class ProductController extends Controller
         }
 
         if ($request->boolean('low_stock_only')) {
-            $query->whereColumn('stock_quantity', '<=', 'min_stock');
+            $query->whereHas('warehouseStocks', function ($stockQuery) use ($warehouseId) {
+                $stockQuery->where('warehouse_id', $warehouseId)
+                    ->whereColumn('quantity', '<=', 'products.min_stock');
+            });
         }
 
         $perPage = min((int) $request->input('per_page', 15), 100);
         $products = $query->latest()->paginate($perPage);
+        $this->appendWarehouseStockContext($products);
 
         return $this->paginatedResponse($products, 'Lấy danh sách sản phẩm thành công');
     }
 
     public function lowStock(Request $request)
     {
+        $warehouseId = (int) getCurrentWarehouseId();
         $perPage = min((int) $request->input('per_page', 15), 100);
 
         $products = Product::query()
-            ->with(['category', 'brand'])
-            ->whereColumn('stock_quantity', '<=', 'min_stock')
+            ->with([
+                'category',
+                'brand',
+                'warehouseStocks' => fn ($q) => $q->where('warehouse_id', $warehouseId),
+            ])
+            ->whereHas('warehouseStocks', function ($stockQuery) use ($warehouseId) {
+                $stockQuery->where('warehouse_id', $warehouseId)
+                    ->whereColumn('quantity', '<=', 'products.min_stock');
+            })
             ->paginate($perPage);
+
+        $this->appendWarehouseStockContext($products);
 
         return $this->paginatedResponse($products, 'Lấy danh sách hàng sắp hết thành công');
     }
@@ -65,10 +85,19 @@ class ProductController extends Controller
 
     public function show(Product $product)
     {
-        return $this->successResponse(
-            $product->load(['category', 'brand', 'orderItems']),
-            'Lấy chi tiết sản phẩm thành công'
-        );
+        $warehouseId = (int) getCurrentWarehouseId();
+
+        $product->load([
+            'category',
+            'brand',
+            'orderItems',
+            'warehouseStocks' => fn ($q) => $q->where('warehouse_id', $warehouseId),
+        ]);
+
+        $stock = $product->warehouseStocks->first();
+        $product->setAttribute('current_stock_quantity', (int) ($stock->quantity ?? 0));
+
+        return $this->successResponse($product, 'Lấy chi tiết sản phẩm thành công');
     }
 
     public function update(UpdateProductRequest $request, Product $product)
@@ -86,5 +115,15 @@ class ProductController extends Controller
         $product->delete();
 
         return $this->successResponse(null, 'Xóa sản phẩm thành công');
+    }
+
+    private function appendWarehouseStockContext($paginatedProducts): void
+    {
+        $paginatedProducts->getCollection()->transform(function (Product $product) {
+            $stock = $product->warehouseStocks->first();
+            $product->setAttribute('current_stock_quantity', (int) ($stock->quantity ?? 0));
+
+            return $product;
+        });
     }
 }

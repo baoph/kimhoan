@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\CheckWarehouseAccess;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
@@ -19,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Bật trạng thái API cho Sanctum và middleware liên quan.
         $middleware->statefulApi();
+
+        $middleware->alias([
+            'check.warehouse.access' => CheckWarehouseAccess::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (ValidationException $e, Request $request) {

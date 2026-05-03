@@ -89,6 +89,7 @@ class PurchaseOrderSeeder extends Seeder
                     Product::query()->whereKey($item['product_id'])->increment('stock_quantity', $item['quantity']);
 
                     InventoryTransaction::create([
+                        'warehouse_id' => $warehouse->id,
                         'product_id' => $item['product_id'],
                         'transaction_type' => 'purchase',
                         'quantity' => $item['quantity'],

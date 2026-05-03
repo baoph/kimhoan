@@ -9,7 +9,6 @@ class UpdatePurchaseOrderRequest extends BaseApiRequest
     public function rules(): array
     {
         return [
-            'warehouse_id' => ['sometimes', 'required', 'exists:warehouses,id'],
             'supplier_id' => ['sometimes', 'required', 'exists:suppliers,id'],
             'order_date' => ['sometimes', 'required', 'date'],
             'status' => ['nullable', 'in:draft,pending,completed,cancelled'],
@@ -24,7 +23,6 @@ class UpdatePurchaseOrderRequest extends BaseApiRequest
     public function attributes(): array
     {
         return [
-            'warehouse_id' => 'kho',
             'supplier_id' => 'nhà cung cấp',
             'order_date' => 'ngày nhập',
             'status' => 'trạng thái',

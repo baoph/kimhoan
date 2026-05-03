@@ -12,6 +12,7 @@ class Order extends Model
     use HasFactory;
 
     protected $fillable = [
+        'warehouse_id',
         'order_code',
         'customer_id',
         'staff_id',
@@ -32,6 +33,11 @@ class Order extends Model
             'discount' => 'decimal:2',
             'final_amount' => 'decimal:2',
         ];
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
     }
 
     public function customer(): BelongsTo

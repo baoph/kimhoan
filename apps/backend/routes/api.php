@@ -20,7 +20,9 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/auth/profile', [AuthController::class, 'profile']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+    });
 
+    Route::middleware(['auth:sanctum', 'check.warehouse.access'])->group(function () {
         Route::apiResource('customers', CustomerController::class);
 
         Route::get('/products/low-stock', [ProductController::class, 'lowStock']);

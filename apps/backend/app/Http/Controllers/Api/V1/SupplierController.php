@@ -81,7 +81,10 @@ class SupplierController extends Controller
     public function purchaseHistory(Supplier $supplier, Request $request)
     {
         try {
+            $warehouseId = (int) getCurrentWarehouseId();
+
             $history = $supplier->purchaseOrders()
+                ->where('warehouse_id', $warehouseId)
                 ->with(['warehouse', 'creator'])
                 ->latest('order_date')
                 ->paginate(min((int) $request->input('per_page', 15), 100));

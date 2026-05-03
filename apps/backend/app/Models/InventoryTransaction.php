@@ -13,6 +13,7 @@ class InventoryTransaction extends Model
     public $updated_at = false;
 
     protected $fillable = [
+        'warehouse_id',
         'product_id',
         'transaction_type',
         'quantity',
@@ -25,6 +26,11 @@ class InventoryTransaction extends Model
         return [
             'created_at' => 'datetime',
         ];
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
     }
 
     public function product(): BelongsTo
