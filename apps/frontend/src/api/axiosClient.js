@@ -43,9 +43,12 @@ axiosClient.interceptors.request.use(
     if (xsrfToken) {
       const decodedToken = decodeURIComponent(xsrfToken);
       config.headers['X-XSRF-TOKEN'] = decodedToken;
-      console.log('[axiosClient] X-XSRF-TOKEN header set:', decodedToken.slice(0, 12) + '...');
-    } else {
-      console.warn('[axiosClient] XSRF-TOKEN cookie not found before request:', config.url);
+    }
+
+    // Gửi kho hiện tại qua header để backend tự lọc dữ liệu theo ngữ cảnh kho
+    const warehouseId = localStorage.getItem('current_warehouse_id');
+    if (warehouseId) {
+      config.headers['X-Warehouse-Id'] = warehouseId;
     }
 
     return config;

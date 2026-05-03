@@ -23,6 +23,7 @@ export function AuthProvider({ children }) {
         setUser(res.data.data);
       } catch {
         localStorage.removeItem('auth_token');
+        localStorage.removeItem('current_warehouse_id');
         setUser(null);
       } finally {
         setLoading(false);
@@ -34,6 +35,7 @@ export function AuthProvider({ children }) {
       (error) => {
         if (error.response?.status === 401) {
           localStorage.removeItem('auth_token');
+          localStorage.removeItem('current_warehouse_id');
           setUser(null);
           navigate('/login');
         }
@@ -61,6 +63,7 @@ export function AuthProvider({ children }) {
       // ignore
     }
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('current_warehouse_id');
     setUser(null);
     toast.info('Đã đăng xuất');
     navigate('/login');

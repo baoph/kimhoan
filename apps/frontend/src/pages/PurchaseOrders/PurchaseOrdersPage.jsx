@@ -9,9 +9,11 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 import WarehouseSelect from '../../components/common/WarehouseSelect';
 import SupplierSelect from '../../components/common/SupplierSelect';
 import { formatCurrency, formatDateOnly } from '../../utils/format';
+import { useWarehouse } from '../../contexts/WarehouseContext';
 
 export default function PurchaseOrdersPage() {
   const navigate = useNavigate();
+  const { currentWarehouse } = useWarehouse();
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -134,7 +136,10 @@ export default function PurchaseOrdersPage() {
     <div className="rounded-xl bg-white shadow-card">
       <div className="flex flex-col gap-3 border-b p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <h2 className="text-xl font-semibold">Phiếu nhập hàng</h2>
+          <div>
+            <h2 className="text-xl font-semibold">Phiếu nhập hàng</h2>
+            <p className="mt-1 text-sm text-slate-500">Kho hiện tại: {currentWarehouse?.name || 'Chưa chọn kho'}</p>
+          </div>
           <button
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-white"
             onClick={() => navigate('/purchase-orders/create')}

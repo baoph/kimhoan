@@ -3,8 +3,10 @@ import { dashboardApi } from '../api/services';
 import { formatCurrency, formatNumber } from '../utils/format';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'react-toastify';
+import { useWarehouse } from '../contexts/WarehouseContext';
 
 export default function DashboardPage() {
+  const { currentWarehouse } = useWarehouse();
   const [stats, setStats] = useState({ revenue: 0, returns: 0, orders_count: 0 });
   const [chartType, setChartType] = useState('day');
   const [chartData, setChartData] = useState([]);
@@ -34,6 +36,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-5">
+      <div className="rounded-xl bg-white p-4 shadow-card">
+        <h2 className="text-xl font-semibold">Tổng quan</h2>
+        <p className="mt-1 text-sm text-slate-500">Kho hiện tại: {currentWarehouse?.name || 'Chưa chọn kho'}</p>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard title="Doanh thu" value={formatCurrency(stats.revenue)} />
         <StatCard title="Trả hàng" value={formatCurrency(stats.returns)} />

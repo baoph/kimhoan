@@ -14,8 +14,18 @@ import SuppliersPage from './pages/Suppliers/SuppliersPage';
 import PurchaseOrdersPage from './pages/PurchaseOrders/PurchaseOrdersPage';
 import CreatePurchaseOrderPage from './pages/PurchaseOrders/CreatePurchaseOrderPage';
 import PurchaseOrderDetailPage from './pages/PurchaseOrders/PurchaseOrderDetailPage';
+import LoadingSpinner from './components/common/LoadingSpinner';
+import { useWarehouse } from './contexts/WarehouseContext';
+import { useAuth } from './hooks/useAuth';
 
 export default function App() {
+  const { user } = useAuth();
+  const { loading } = useWarehouse();
+
+  if (user && loading) {
+    return <LoadingSpinner fullPage />;
+  }
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />

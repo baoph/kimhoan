@@ -4,8 +4,8 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { purchaseOrderService } from '../../api/services';
 import ProductSelect from '../../components/common/ProductSelect';
-import WarehouseSelect from '../../components/common/WarehouseSelect';
 import SupplierSelect from '../../components/common/SupplierSelect';
+import { useWarehouse } from '../../contexts/WarehouseContext';
 import { formatCurrency, formatNumber } from '../../utils/format';
 
 const newRow = () => ({
@@ -19,12 +19,12 @@ export default function CreatePurchaseOrderPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const { currentWarehouse } = useWarehouse();
 
   const editId = searchParams.get('edit');
   const initialOrderFromState = location.state?.purchaseOrder;
 
   const [form, setForm] = useState({
-    warehouse_id: '',
     supplier_id: '',
     order_date: new Date().toISOString().slice(0, 10),
     notes: '',
@@ -43,7 +43,6 @@ export default function CreatePurchaseOrderPage() {
 
   const hydrateOrderToForm = (order) => {
     setForm({
-      warehouse_id: String(order.warehouse_id || order.warehouse?.id || ''),
       supplier_id: String(order.supplier_id || order.supplier?.id || ''),
       order_date: order.order_date ? String(order.order_date).slice(0, 10) : new Date().toISOString().slice(0, 10),
       notes: order.notes || '',
@@ -84,12 +83,11 @@ export default function CreatePurchaseOrderPage() {
     };
 
     loadOrder();
-  }, [editId]);
+  }, [editId, initialOrderFromState, isEditMode, navigate]);
 
   const validate = () => {
     const nextErrors = {};
 
-    if (!form.warehouse_id) nextErrors.warehouse_id = 'Vui lòng chọn kho';
     if (!form.supplier_id) nextErrors.supplier_id = 'Vui lòng chọn nhà cung cấp';
     if (!form.order_date) nextErrors.order_date = 'Vui lòng chọn ngày nhập';
 
@@ -114,7 +112,6 @@ export default function CreatePurchaseOrderPage() {
   };
 
   const buildPayload = (status) => ({
-    warehouse_id: Number(form.warehouse_id),
     supplier_id: Number(form.supplier_id),
     order_date: form.order_date,
     notes: form.notes || null,
@@ -127,6 +124,11 @@ export default function CreatePurchaseOrderPage() {
   });
 
   const handleSave = async (targetStatus) => {
+    if (!currentWarehouse?.id) {
+      toast.error('Không tìm thấy kho hiện tại. Vui lòng chọn kho ở thanh trên cùng.');
+      return;
+    }
+
     if (!validate()) return;
 
     setSaving(true);
@@ -197,16 +199,11 @@ export default function CreatePurchaseOrderPage() {
           <FiArrowLeft /> Quay lại danh sách phiếu nhập
         </button>
         <h2 className="text-xl font-semibold">{isEditMode ? 'Chỉnh sửa phiếu nhập' : 'Tạo phiếu nhập mới'}</h2>
+        <p className="mt-1 text-sm text-slate-500">Kho hiện tại: {currentWarehouse?.name || 'Chưa chọn kho'}</p>
       </div>
 
       <div className="rounded-xl bg-white p-4 shadow-card">
         <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Kho *</label>
-            <WarehouseSelect value={form.warehouse_id} onChange={(value) => setForm((prev) => ({ ...prev, warehouse_id: value }))} />
-            {errors.warehouse_id && <p className="mt-1 text-xs text-red-600">{errors.warehouse_id}</p>}
-          </div>
-
           <div>
             <label className="mb-1 block text-sm font-medium">Nhà cung cấp *</label>
             <SupplierSelect value={form.supplier_id} onChange={(value) => setForm((prev) => ({ ...prev, supplier_id: value }))} />
@@ -224,7 +221,7 @@ export default function CreatePurchaseOrderPage() {
             {errors.order_date && <p className="mt-1 text-xs text-red-600">{errors.order_date}</p>}
           </div>
 
-          <div>
+          <div className="md:col-span-2">
             <label className="mb-1 block text-sm font-medium">Ghi chú</label>
             <textarea
               rows={2}

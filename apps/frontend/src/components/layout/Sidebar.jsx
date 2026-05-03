@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { FiBarChart2, FiBox, FiClipboard, FiHome, FiShoppingCart, FiTruck, FiUsers } from 'react-icons/fi';
+import { FiBarChart2, FiBox, FiClipboard, FiHome, FiSettings, FiShoppingCart, FiTruck, FiUsers } from 'react-icons/fi';
 
 const menus = [
   { to: '/', label: 'Tổng quan', icon: FiHome },
@@ -9,8 +9,8 @@ const menus = [
   { to: '/reports', label: 'Báo cáo', icon: FiBarChart2 },
 ];
 
-const warehouseMenus = [
-  { to: '/warehouses', label: 'Danh sách kho', icon: FiBox },
+const settingMenus = [
+  { to: '/warehouses', label: 'Quản lý kho', icon: FiBox },
   { to: '/suppliers', label: 'Nhà cung cấp', icon: FiTruck },
   { to: '/purchase-orders', label: 'Phiếu nhập hàng', icon: FiShoppingCart },
 ];
@@ -46,11 +46,11 @@ export default function Sidebar({ open, onClose }) {
 
         <div className="mx-3 mt-3 rounded-lg bg-white/10 p-3">
           <div className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-white/90">
-            <FiShoppingCart /> Quản lý kho
+            <FiSettings /> Cài đặt
           </div>
 
           <div className="space-y-1">
-            {warehouseMenus.map(({ to, label, icon: Icon }) => (
+            {settingMenus.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}

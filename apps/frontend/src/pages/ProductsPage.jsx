@@ -7,8 +7,10 @@ import ProductForm from '../components/forms/ProductForm';
 import Pagination from '../components/common/Pagination';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { toast } from 'react-toastify';
+import { useWarehouse } from '../contexts/WarehouseContext';
 
 export default function ProductsPage() {
+  const { currentWarehouse } = useWarehouse();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -96,7 +98,10 @@ export default function ProductsPage() {
   return (
     <div className="rounded-xl bg-white shadow-card">
       <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold">Quản lý hàng hóa</h2>
+        <div>
+          <h2 className="text-xl font-semibold">Quản lý hàng hóa</h2>
+          <p className="mt-1 text-sm text-slate-500">Kho hiện tại: {currentWarehouse?.name || 'Chưa chọn kho'}</p>
+        </div>
         <div className="flex gap-2">
           <input
             className="rounded-lg border px-3 py-2"

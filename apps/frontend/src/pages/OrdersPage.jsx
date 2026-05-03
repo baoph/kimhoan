@@ -8,8 +8,10 @@ import Pagination from '../components/common/Pagination';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { ORDER_STATUSES, PAYMENT_STATUSES } from '../utils/constants';
 import { toast } from 'react-toastify';
+import { useWarehouse } from '../contexts/WarehouseContext';
 
 export default function OrdersPage() {
+  const { currentWarehouse } = useWarehouse();
   const [orders, setOrders] = useState([]);
   const [meta, setMeta] = useState(null);
   const [page, setPage] = useState(1);
@@ -107,7 +109,10 @@ export default function OrdersPage() {
     <div className="space-y-4">
       <div className="rounded-xl bg-white p-4 shadow-card">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <h2 className="text-xl font-semibold">Quản lý đơn hàng</h2>
+          <div>
+            <h2 className="text-xl font-semibold">Quản lý đơn hàng</h2>
+            <p className="mt-1 text-sm text-slate-500">Kho hiện tại: {currentWarehouse?.name || 'Chưa chọn kho'}</p>
+          </div>
           <div className="flex flex-wrap gap-2">
             <input
               className="rounded-lg border px-3 py-2"
