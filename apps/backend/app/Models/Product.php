@@ -61,6 +61,11 @@ class Product extends Model
         return $this->hasMany(InventoryTransaction::class);
     }
 
+    public function warehouseStocks(): HasMany
+    {
+        return $this->hasMany(WarehouseStock::class);
+    }
+
     protected function isLowStock(): Attribute
     {
         return Attribute::make(get: fn () => $this->stock_quantity <= $this->min_stock);

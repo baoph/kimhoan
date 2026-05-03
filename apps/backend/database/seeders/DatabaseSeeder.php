@@ -14,8 +14,11 @@ class DatabaseSeeder extends Seeder
             CategorySeeder::class,
             BrandSeeder::class,
             ProductSeeder::class,
+            WarehouseSeeder::class,
+            SupplierSeeder::class,
             CustomerSeeder::class,
             OrderSeeder::class,
+            PurchaseOrderSeeder::class,
         ]);
     }
 }

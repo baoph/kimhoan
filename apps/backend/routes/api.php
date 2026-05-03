@@ -7,7 +7,10 @@ use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\ProductController;
+use App\Http\Controllers\Api\V1\PurchaseOrderController;
 use App\Http\Controllers\Api\V1\ReportController;
+use App\Http\Controllers\Api\V1\SupplierController;
+use App\Http\Controllers\Api\V1\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -28,6 +31,17 @@ Route::prefix('v1')->group(function () {
 
         Route::apiResource('categories', CategoryController::class);
         Route::apiResource('brands', BrandController::class);
+
+        Route::get('/warehouses/{warehouse}/stock', [WarehouseController::class, 'stock']);
+        Route::apiResource('warehouses', WarehouseController::class);
+
+        Route::get('/suppliers/{supplier}/purchase-history', [SupplierController::class, 'purchaseHistory']);
+        Route::apiResource('suppliers', SupplierController::class);
+
+        Route::post('/purchase-orders/{purchaseOrder}/complete', [PurchaseOrderController::class, 'complete']);
+        Route::post('/purchase-orders/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel']);
+        Route::apiResource('purchase-orders', PurchaseOrderController::class)
+            ->parameters(['purchase-orders' => 'purchaseOrder']);
 
         Route::prefix('dashboard')->group(function () {
             Route::get('/today-stats', [DashboardController::class, 'getTodayStats']);
