@@ -76,3 +76,34 @@ export const reportsApi = {
   sales: (params) => axiosClient.get('/reports/sales', q(params)),
   inventory: (params) => axiosClient.get('/reports/inventory', q(params)),
 };
+
+// Warehouse Services
+export const warehouseService = {
+  getAll: (params) => axiosClient.get('/warehouses', { params }),
+  getById: (id) => axiosClient.get(`/warehouses/${id}`),
+  create: (data) => axiosClient.post('/warehouses', data),
+  update: (id, data) => axiosClient.put(`/warehouses/${id}`, data),
+  delete: (id) => axiosClient.delete(`/warehouses/${id}`),
+  getStock: (id, params) => axiosClient.get(`/warehouses/${id}/stock`, { params }),
+};
+
+// Supplier Services
+export const supplierService = {
+  getAll: (params) => axiosClient.get('/suppliers', { params }),
+  getById: (id) => axiosClient.get(`/suppliers/${id}`),
+  create: (data) => axiosClient.post('/suppliers', data),
+  update: (id, data) => axiosClient.put(`/suppliers/${id}`, data),
+  delete: (id) => axiosClient.delete(`/suppliers/${id}`),
+  getPurchaseHistory: (id, params) => axiosClient.get(`/suppliers/${id}/purchase-history`, { params }),
+};
+
+// Purchase Order Services
+export const purchaseOrderService = {
+  getAll: (params) => axiosClient.get('/purchase-orders', { params }),
+  getById: (id) => axiosClient.get(`/purchase-orders/${id}`),
+  create: (data) => axiosClient.post('/purchase-orders', data),
+  update: (id, data) => axiosClient.put(`/purchase-orders/${id}`, data),
+  delete: (id) => axiosClient.delete(`/purchase-orders/${id}`),
+  complete: (id) => axiosClient.post(`/purchase-orders/${id}/complete`),
+  cancel: (id) => axiosClient.post(`/purchase-orders/${id}/cancel`),
+};

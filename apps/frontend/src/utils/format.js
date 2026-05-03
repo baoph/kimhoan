@@ -19,6 +19,15 @@ export const formatDate = (value) => {
   }
 };
 
+export const formatDateOnly = (value) => {
+  if (!value) return '--';
+  try {
+    return format(new Date(value), 'dd/MM/yyyy', { locale: vi });
+  } catch {
+    return '--';
+  }
+};
+
 export const toInputDateTime = (value) => {
   if (!value) return '';
   const date = new Date(value);
