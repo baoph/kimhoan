@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { FiBarChart2, FiBox, FiClipboard, FiHome, FiSettings, FiShoppingCart, FiTruck, FiUsers } from 'react-icons/fi';
+import { FiBarChart2, FiBox, FiClipboard, FiHome, FiSettings, FiShoppingCart, FiTruck, FiUserCheck, FiUsers } from 'react-icons/fi';
 
 const menus = [
   { to: '/', label: 'Tổng quan', icon: FiHome },
   { to: '/products', label: 'Hàng hóa', icon: FiBox },
   { to: '/customers', label: 'Khách hàng', icon: FiUsers },
+  { to: '/users', label: 'Nhân viên', icon: FiUserCheck },
   { to: '/orders', label: 'Đơn hàng', icon: FiClipboard },
   { to: '/reports', label: 'Báo cáo', icon: FiBarChart2 },
 ];

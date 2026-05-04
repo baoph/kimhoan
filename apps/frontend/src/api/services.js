@@ -107,3 +107,17 @@ export const purchaseOrderService = {
   complete: (id) => axiosClient.post(`/purchase-orders/${id}/complete`),
   cancel: (id) => axiosClient.post(`/purchase-orders/${id}/cancel`),
 };
+
+// User Services
+export const userService = {
+  getAll: (params) => axiosClient.get('/users', { params }),
+  getById: (id) => axiosClient.get(`/users/${id}`),
+  create: (data) => axiosClient.post('/users', data),
+  update: (id, data) => axiosClient.put(`/users/${id}`, data),
+  delete: (id) => axiosClient.delete(`/users/${id}`),
+  resetPassword: (id, data) => axiosClient.post(`/users/${id}/reset-password`, data),
+  lock: (id) => axiosClient.post(`/users/${id}/lock`),
+  unlock: (id) => axiosClient.post(`/users/${id}/unlock`),
+  assignWarehouses: (id, data) => axiosClient.post(`/users/${id}/assign-warehouses`, data),
+  getActivityLogs: (id, params) => axiosClient.get(`/users/${id}/activity-logs`, { params }),
+};

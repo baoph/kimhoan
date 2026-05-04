@@ -7,6 +7,7 @@ import ProductsPage from './pages/ProductsPage';
 import CustomersPage from './pages/CustomersPage';
 import OrdersPage from './pages/OrdersPage';
 import ReportsPage from './pages/ReportsPage';
+import UsersPage from './pages/Users/UsersPage';
 import NotFoundPage from './pages/NotFoundPage';
 import WarehousesPage from './pages/Warehouses/WarehousesPage';
 import WarehouseStockPage from './pages/Warehouses/WarehouseStockPage';
@@ -94,6 +95,7 @@ export default function App() {
         <Route path="customers" element={<CustomersPage />} />
         <Route path="orders" element={<OrdersPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="users" element={<UsersPage />} />
 
         <Route path="warehouses" element={<WarehousesPage />} />
         <Route path="warehouses/:id/stock" element={<WarehouseStockPage />} />
