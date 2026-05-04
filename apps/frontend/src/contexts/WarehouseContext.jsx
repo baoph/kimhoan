@@ -17,17 +17,24 @@ const toArray = (response) => {
 };
 
 export function WarehouseProvider({ children }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [currentWarehouse, setCurrentWarehouse] = useState(null);
   const [warehouses, setWarehouses] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const resetWarehouseState = useCallback(() => {
+    setCurrentWarehouse(null);
+    setWarehouses([]);
+    setError(null);
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
 
   const hydrateCurrentWarehouse = useCallback((warehouseList) => {
     if (!warehouseList.length) {
       setCurrentWarehouse(null);
       localStorage.removeItem(STORAGE_KEY);
-      return;
+      return null;
     }
 
     const savedWarehouseId = Number(localStorage.getItem(STORAGE_KEY));
@@ -35,44 +42,82 @@ export function WarehouseProvider({ children }) {
 
     setCurrentWarehouse(selectedWarehouse);
     localStorage.setItem(STORAGE_KEY, String(selectedWarehouse.id));
+
+    return selectedWarehouse;
   }, []);
 
-  const fetchWarehouses = useCallback(async () => {
-    if (!user) {
-      setWarehouses([]);
-      setCurrentWarehouse(null);
-      setLoading(false);
+  const fetchWarehouses = useCallback(
+    async (options = {}) => {
+      const authenticatedUser = options.authenticatedUser ?? user;
+
+      if (!authenticatedUser) {
+        resetWarehouseState();
+        setLoading(false);
+
+        return {
+          ok: false,
+          reason: 'unauthenticated',
+        };
+      }
+
+      setLoading(true);
       setError(null);
+
+      try {
+        const response = await warehouseService.getAll({ per_page: 100 });
+        const warehouseList = toArray(response).filter((item) => item?.is_active !== false);
+
+        setWarehouses(warehouseList);
+        const selectedWarehouse = hydrateCurrentWarehouse(warehouseList);
+
+        if (!warehouseList.length) {
+          toast.warn('Tài khoản của bạn chưa được gán kho hoạt động.');
+
+          return {
+            ok: false,
+            reason: 'no_warehouses',
+            warehouses: [],
+          };
+        }
+
+        return {
+          ok: true,
+          warehouses: warehouseList,
+          currentWarehouse: selectedWarehouse,
+        };
+      } catch (err) {
+        console.error('Không thể tải danh sách kho:', err);
+        setWarehouses([]);
+        setCurrentWarehouse(null);
+        setError(err);
+        localStorage.removeItem(STORAGE_KEY);
+        toast.error(err.response?.data?.message || 'Không thể tải danh sách kho');
+
+        return {
+          ok: false,
+          reason: 'api_error',
+          error: err,
+        };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [hydrateCurrentWarehouse, resetWarehouseState, user]
+  );
+
+  useEffect(() => {
+    if (authLoading) {
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await warehouseService.getAll({ per_page: 100 });
-      const warehouseList = toArray(response).filter((item) => item?.is_active !== false);
-
-      setWarehouses(warehouseList);
-      hydrateCurrentWarehouse(warehouseList);
-
-      if (!warehouseList.length) {
-        toast.warn('Tài khoản của bạn chưa được gán kho hoạt động.');
-      }
-    } catch (err) {
-      console.error('Không thể tải danh sách kho:', err);
-      setWarehouses([]);
-      setCurrentWarehouse(null);
-      setError(err);
-      toast.error(err.response?.data?.message || 'Không thể tải danh sách kho');
-    } finally {
+    if (!user) {
+      resetWarehouseState();
       setLoading(false);
+      return;
     }
-  }, [hydrateCurrentWarehouse, user]);
 
-  useEffect(() => {
     fetchWarehouses();
-  }, [fetchWarehouses]);
+  }, [authLoading, fetchWarehouses, resetWarehouseState, user]);
 
   const switchWarehouse = useCallback((warehouse) => {
     if (!warehouse || !warehouse.id) return;

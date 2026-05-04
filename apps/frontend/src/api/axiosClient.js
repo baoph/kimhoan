@@ -16,6 +16,20 @@ function getCookie(name) {
   return null;
 }
 
+function getRequestPath(url = '') {
+  try {
+    return new URL(url, window.location.origin).pathname;
+  } catch {
+    return (url || '').split('?')[0];
+  }
+}
+
+function shouldSkipWarehouseHeader(url = '') {
+  const requestPath = getRequestPath(url);
+
+  return requestPath.startsWith('/auth/') || requestPath === '/auth' || requestPath === '/warehouses' || requestPath === '/warehouses/';
+}
+
 const axiosClient = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -32,23 +46,22 @@ axiosClient.interceptors.request.use(
     config.headers = config.headers || {};
     config.headers['X-Requested-With'] = 'XMLHttpRequest';
 
-    // Get token from localStorage (ưu tiên key mới, fallback key hiện tại)
     const token = localStorage.getItem('token') || localStorage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Get XSRF token from cookie and add to header
     const xsrfToken = getCookie('XSRF-TOKEN');
     if (xsrfToken) {
       const decodedToken = decodeURIComponent(xsrfToken);
       config.headers['X-XSRF-TOKEN'] = decodedToken;
     }
 
-    // Gửi kho hiện tại qua header để backend tự lọc dữ liệu theo ngữ cảnh kho
     const warehouseId = localStorage.getItem('current_warehouse_id');
-    if (warehouseId) {
+    if (warehouseId && !shouldSkipWarehouseHeader(config.url)) {
       config.headers['X-Warehouse-Id'] = warehouseId;
+    } else {
+      delete config.headers['X-Warehouse-Id'];
     }
 
     return config;

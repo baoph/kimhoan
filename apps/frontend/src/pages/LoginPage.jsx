@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { FiLogIn } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import { useWarehouse } from '../contexts/WarehouseContext';
 
 const schema = Yup.object({
   email: Yup.string().email('Email không hợp lệ').required('Vui lòng nhập email'),
@@ -12,6 +13,7 @@ const schema = Yup.object({
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { refreshWarehouses } = useWarehouse();
   const navigate = useNavigate();
 
   return (
@@ -25,9 +27,11 @@ export default function LoginPage() {
           validationSchema={schema}
           onSubmit={async (values, { setSubmitting }) => {
             try {
-              console.info('[LoginPage] Submit login payload for:', values.email);
-              await login(values);
-              navigate('/');
+              const loginResponse = await login(values);
+              const loggedUser = loginResponse?.data?.data?.user;
+
+              await refreshWarehouses({ authenticatedUser: loggedUser });
+              navigate('/', { replace: true });
             } catch (error) {
               console.error('[LoginPage] Login failed:', error?.response?.data || error.message);
               toast.error(error.response?.data?.message || 'Đăng nhập thất bại');
@@ -61,9 +65,7 @@ export default function LoginPage() {
           )}
         </Formik>
 
-        <div className="mt-5 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
-          Tài khoản mẫu: admin@kimhoan.local / 12345678
-        </div>
+        <div className="mt-5 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">Tài khoản mẫu: admin@kimhoan.local / 12345678</div>
       </div>
     </div>
   );
