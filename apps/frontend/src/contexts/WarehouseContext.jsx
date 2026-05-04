@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { warehouseService } from '../api/services';
 import { useAuth } from '../hooks/useAuth';
@@ -22,13 +22,24 @@ export function WarehouseProvider({ children }) {
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const hasFetchedRef = useRef(false);
+  const loadingTimerRef = useRef(null);
+
+  const clearLoadingTimer = useCallback(() => {
+    if (loadingTimerRef.current) {
+      clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = null;
+    }
+  }, []);
 
   const resetWarehouseState = useCallback(() => {
+    clearLoadingTimer();
+    hasFetchedRef.current = false;
     setCurrentWarehouse(null);
     setWarehouses([]);
     setError(null);
     localStorage.removeItem(STORAGE_KEY);
-  }, []);
+  }, [clearLoadingTimer]);
 
   const hydrateCurrentWarehouse = useCallback((warehouseList) => {
     if (!warehouseList.length) {
@@ -60,6 +71,8 @@ export function WarehouseProvider({ children }) {
         };
       }
 
+      hasFetchedRef.current = true;
+      clearLoadingTimer();
       setLoading(true);
       setError(null);
 
@@ -99,10 +112,13 @@ export function WarehouseProvider({ children }) {
           error: err,
         };
       } finally {
-        setLoading(false);
+        loadingTimerRef.current = setTimeout(() => {
+          setLoading(false);
+          loadingTimerRef.current = null;
+        }, 100);
       }
     },
-    [hydrateCurrentWarehouse, resetWarehouseState, user]
+    [clearLoadingTimer, hydrateCurrentWarehouse, resetWarehouseState, user]
   );
 
   useEffect(() => {
@@ -116,8 +132,12 @@ export function WarehouseProvider({ children }) {
       return;
     }
 
-    fetchWarehouses();
+    if (!hasFetchedRef.current) {
+      fetchWarehouses();
+    }
   }, [authLoading, fetchWarehouses, resetWarehouseState, user]);
+
+  useEffect(() => () => clearLoadingTimer(), [clearLoadingTimer]);
 
   const switchWarehouse = useCallback((warehouse) => {
     if (!warehouse || !warehouse.id) return;
