@@ -14,13 +14,28 @@ class CheckWarehouseAccess
      */
     public function handle(Request $request, Closure $next): Response
     {
+        // Các route này được gọi trước khi frontend có warehouse context.
+        $excludedRoutes = [
+            'api/v1/warehouses',
+            'api/v1/auth/login',
+            'api/v1/auth/logout',
+            'api/v1/auth/user',
+            'api/v1/auth/profile',
+            'api/v1/user',
+        ];
+
+        $currentPath = $request->path();
+        if (in_array($currentPath, $excludedRoutes, true)) {
+            return $next($request);
+        }
+
         $warehouseId = $request->header('X-Warehouse-Id');
 
         if (! $warehouseId || ! ctype_digit((string) $warehouseId)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Thiếu hoặc sai định dạng header X-Warehouse-Id',
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            ], Response::HTTP_BAD_REQUEST);
         }
 
         $warehouse = Warehouse::query()
@@ -31,7 +46,7 @@ class CheckWarehouseAccess
         if (! $warehouse) {
             return response()->json([
                 'success' => false,
-                'message' => 'Kho được chọn không tồn tại hoặc đã ngừng hoạt động',
+                'message' => 'Kho không tồn tại',
             ], Response::HTTP_NOT_FOUND);
         }
 

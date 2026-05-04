@@ -14,22 +14,14 @@ class WarehouseController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Warehouse::query();
+            $user = $request->user();
 
-            if ($search = $request->string('search')->toString()) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('code', 'like', "%{$search}%")
-                        ->orWhere('name', 'like', "%{$search}%");
-                });
-            }
+            $warehouses = $user->warehouses()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get();
 
-            if (! is_null($request->input('is_active'))) {
-                $query->where('is_active', (bool) $request->boolean('is_active'));
-            }
-
-            $warehouses = $query->latest()->paginate(min((int) $request->input('per_page', 15), 100));
-
-            return $this->paginatedResponse($warehouses, 'Lấy danh sách kho thành công');
+            return $this->successResponse($warehouses, 'Lấy danh sách kho thành công');
         } catch (Throwable $e) {
             return $this->errorResponse('Không thể lấy danh sách kho', ['error' => $e->getMessage()], 500);
         }
