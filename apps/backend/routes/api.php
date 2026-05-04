@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\PurchaseOrderController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\SupplierController;
+use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,6 +27,16 @@ Route::prefix('v1')->group(function () {
 
         // Frontend cần gọi endpoint này ngay sau login để lấy danh sách kho có quyền.
         Route::get('/warehouses', [WarehouseController::class, 'index']);
+
+        // Chỉ admin được quản lý tài khoản người dùng.
+        Route::middleware('role:admin')->group(function () {
+            Route::apiResource('users', UserController::class);
+            Route::post('/users/{user}/reset-password', [UserController::class, 'resetPassword']);
+            Route::post('/users/{user}/lock', [UserController::class, 'lock']);
+            Route::post('/users/{user}/unlock', [UserController::class, 'unlock']);
+            Route::post('/users/{user}/assign-warehouses', [UserController::class, 'assignWarehouses']);
+            Route::get('/users/{user}/activity-logs', [UserController::class, 'activityLogs']);
+        });
     });
 
     // Các route nghiệp vụ bắt buộc có X-Warehouse-Id.

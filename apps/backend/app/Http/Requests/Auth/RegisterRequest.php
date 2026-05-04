@@ -12,7 +12,7 @@ class RegisterRequest extends BaseApiRequest
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6', 'confirmed'],
-            'role' => ['nullable', 'in:admin,staff'],
+            'role' => ['nullable', 'in:admin,manager,staff'],
             'phone' => ['nullable', 'string', 'max:20'],
         ];
     }

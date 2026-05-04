@@ -21,6 +21,8 @@ class User extends Authenticatable
         'password',
         'role',
         'phone',
+        'is_active',
+        'last_login_at',
     ];
 
     protected $hidden = [
@@ -37,6 +39,8 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
+            'last_login_at' => 'datetime',
         ];
     }
 
@@ -55,6 +59,11 @@ class User extends Authenticatable
         return $this->hasMany(PurchaseOrder::class, 'created_by');
     }
 
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class);
+    }
+
     /**
      * Nhân viên có thể làm ở nhiều kho (global warehouse context).
      */
@@ -70,11 +79,41 @@ class User extends Authenticatable
             return false;
         }
 
-        if ($this->role === 'admin') {
+        if ($this->isAdmin()) {
             return true;
         }
 
         return $this->warehouses()->where('warehouses.id', $warehouseId)->exists();
+    }
+
+    public function canAccessWarehouse(int|string|null $warehouseId): bool
+    {
+        return $this->hasAccessToWarehouse($warehouseId);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isManager(): bool
+    {
+        return $this->role === 'manager';
+    }
+
+    public function isStaff(): bool
+    {
+        return $this->role === 'staff';
+    }
+
+    public function lock(): void
+    {
+        $this->update(['is_active' => false]);
+    }
+
+    public function unlock(): void
+    {
+        $this->update(['is_active' => true]);
     }
 
     /**

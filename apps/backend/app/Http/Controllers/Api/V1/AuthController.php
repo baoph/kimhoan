@@ -37,10 +37,19 @@ class AuthController extends Controller
             return $this->errorResponse('Email hoặc mật khẩu không đúng', null, 401);
         }
 
+        if (! $user->is_active) {
+            return $this->errorResponse('Tài khoản của bạn đã bị khóa', null, 403);
+        }
+
+        $user->update(['last_login_at' => now()]);
+
         $token = $user->createToken('api-token')->plainTextToken;
 
+        auth()->setUser($user);
+        logActivity('login', 'Đăng nhập hệ thống', 'auth', $user->id);
+
         return $this->successResponse([
-            'user' => $user,
+            'user' => $user->fresh(),
             'token' => $token,
         ], 'Đăng nhập thành công');
     }

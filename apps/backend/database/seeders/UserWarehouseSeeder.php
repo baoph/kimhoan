@@ -26,9 +26,9 @@ class UserWarehouseSeeder extends Seeder
             ->get()
             ->each(fn (User $user) => $user->warehouses()->syncWithoutDetaching($warehouseIds->all()));
 
-        // Nhân viên mặc định được gán kho đầu tiên để có thể thao tác ngay sau khi seed.
+        // Quản lý và nhân viên mặc định được gán kho đầu tiên để có thể thao tác ngay sau khi seed.
         User::query()
-            ->where('role', 'staff')
+            ->whereIn('role', ['manager', 'staff'])
             ->get()
             ->each(fn (User $user) => $user->warehouses()->syncWithoutDetaching([$defaultWarehouseId]));
 
