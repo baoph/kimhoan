@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\UserRole;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -26,7 +27,13 @@ class CheckRole
             ], Response::HTTP_FORBIDDEN);
         }
 
-        if (! in_array($user->role, $roles, true)) {
+        $normalizedRoles = collect($roles)
+            ->map(fn (string $role) => UserRole::tryFrom($role)?->value)
+            ->filter()
+            ->values()
+            ->all();
+
+        if (! in_array($user->role?->value, $normalizedRoles, true)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Bạn không có quyền truy cập chức năng này',

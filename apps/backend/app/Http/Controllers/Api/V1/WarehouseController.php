@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Warehouse\StoreWarehouseRequest;
 use App\Http\Requests\Warehouse\UpdateWarehouseRequest;
+use App\Http\Resources\WarehouseResource;
 use App\Models\Warehouse;
 use Illuminate\Http\Request;
 use Throwable;
@@ -21,7 +22,7 @@ class WarehouseController extends Controller
                 ->orderBy('name')
                 ->get();
 
-            return $this->successResponse($warehouses, 'Lấy danh sách kho thành công');
+            return $this->successResponse(WarehouseResource::collection($warehouses)->resolve(), 'Lấy danh sách kho thành công');
         } catch (Throwable $e) {
             return $this->errorResponse('Không thể lấy danh sách kho', ['error' => $e->getMessage()], 500);
         }
@@ -32,7 +33,7 @@ class WarehouseController extends Controller
         try {
             $warehouse = Warehouse::create($request->validated());
 
-            return $this->successResponse($warehouse, 'Tạo kho thành công', 201);
+            return $this->successResponse((new WarehouseResource($warehouse))->resolve(), 'Tạo kho thành công', 201);
         } catch (Throwable $e) {
             return $this->errorResponse('Không thể tạo kho', ['error' => $e->getMessage()], 500);
         }
@@ -45,7 +46,7 @@ class WarehouseController extends Controller
                 return $response;
             }
 
-            return $this->successResponse($warehouse, 'Lấy chi tiết kho thành công');
+            return $this->successResponse((new WarehouseResource($warehouse))->resolve(), 'Lấy chi tiết kho thành công');
         } catch (Throwable $e) {
             return $this->errorResponse('Không thể lấy chi tiết kho', ['error' => $e->getMessage()], 500);
         }
@@ -60,7 +61,7 @@ class WarehouseController extends Controller
 
             $warehouse->update($request->validated());
 
-            return $this->successResponse($warehouse->fresh(), 'Cập nhật kho thành công');
+            return $this->successResponse((new WarehouseResource($warehouse->fresh()))->resolve(), 'Cập nhật kho thành công');
         } catch (Throwable $e) {
             return $this->errorResponse('Không thể cập nhật kho', ['error' => $e->getMessage()], 500);
         }
