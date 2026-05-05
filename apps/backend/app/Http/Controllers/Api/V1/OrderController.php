@@ -25,8 +25,8 @@ class OrderController extends Controller
         $warehouseId = (int) getCurrentWarehouseId();
 
         $query = Order::query()
-            ->with(['customer', 'warehouse', 'orderItems.product', 'staff'])
-            ->where('warehouse_id', $warehouseId);
+            ->withFullRelations()
+            ->byWarehouse($warehouseId);
 
         if ($search = $request->string('search')->toString()) {
             $query->where('order_code', 'like', "%{$search}%");
@@ -135,8 +135,14 @@ class OrderController extends Controller
             return $this->errorResponse('Dữ liệu gửi lên không hợp lệ', $validator->errors(), 422);
         }
 
-        $order->update($validator->validated());
-        $order->load(['customer', 'staff', 'orderItems.product', 'warehouse']);
+        $validated = $validator->validated();
+
+        if (($validated['order_status'] ?? null) === OrderStatus::CANCELLED->value) {
+            $order = $this->orderService->cancelOrder($order);
+        } else {
+            $order->update($validated);
+            $order->load(['customer', 'staff', 'orderItems.product', 'warehouse']);
+        }
 
         return $this->successResponse((new OrderResource($order))->resolve(), 'Cập nhật trạng thái đơn hàng thành công');
     }

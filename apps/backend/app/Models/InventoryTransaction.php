@@ -17,6 +17,7 @@ class InventoryTransaction extends Model
         'product_id',
         'transaction_type',
         'quantity',
+        'reference_type',
         'reference_id',
         'notes',
     ];

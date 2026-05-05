@@ -26,15 +26,11 @@ class ProductController extends Controller
         ]);
 
         if ($search = $request->string('search')->toString()) {
-            $query->where(function ($q) use ($search) {
-                $q->where('product_code', 'like', "%{$search}%")
-                    ->orWhere('name', 'like', "%{$search}%")
-                    ->orWhere('barcode', 'like', "%{$search}%");
-            });
+            $query->search($search);
         }
 
         if ($categoryId = $request->input('category_id')) {
-            $query->where('category_id', $categoryId);
+            $query->byCategory((int) $categoryId);
         }
 
         if ($brandId = $request->input('brand_id')) {

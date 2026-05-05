@@ -4,16 +4,34 @@ namespace App\Services;
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
-use App\Models\Customer;
-use App\Models\InventoryTransaction;
+use App\Events\OrderCancelled;
+use App\Events\OrderCreated;
+use App\Events\StockUpdated;
 use App\Models\Order;
-use App\Models\Product;
-use App\Models\WarehouseStock;
+use App\Repositories\CustomerRepository;
+use App\Repositories\OrderRepository;
+use App\Repositories\ProductRepository;
+use App\Repositories\WarehouseStockRepository;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class OrderService
 {
+    public function __construct(
+        private readonly OrderRepository $orderRepository,
+        private readonly ProductRepository $productRepository,
+        private readonly WarehouseStockRepository $warehouseStockRepository,
+        private readonly CustomerRepository $customerRepository,
+    ) {}
+
+    public function getAllOrders(int $warehouseId): Collection
+    {
+        return $this->orderRepository->getByWarehouse($warehouseId, [
+            'customer', 'warehouse', 'orderItems.product', 'staff',
+        ]);
+    }
+
     public function createOrder(array $data, int $warehouseId, ?int $userId = null): Order
     {
         return DB::transaction(function () use ($data, $warehouseId, $userId) {
@@ -26,7 +44,8 @@ class OrderService
             $totalAmount = $this->calculateTotalAmount($items, $products);
             $discount = (float) ($data['discount'] ?? 0);
 
-            $order = Order::create([
+            /** @var Order $order */
+            $order = $this->orderRepository->create([
                 ...$data,
                 'warehouse_id' => $warehouseId,
                 'staff_id' => $data['staff_id'] ?? $userId,
@@ -39,7 +58,11 @@ class OrderService
 
             $this->syncOrderItemsAndStock($order, $items, $products, $warehouseId, false);
 
-            return $order->load(['customer', 'warehouse', 'orderItems.product', 'staff']);
+            $order = $order->load(['customer', 'warehouse', 'orderItems.product', 'staff']);
+
+            event(new OrderCreated($order));
+
+            return $order;
         });
     }
 
@@ -52,7 +75,7 @@ class OrderService
                 $items = $data['items'];
                 unset($data['items']);
 
-                $this->restoreStock($order, 'Hoàn kho khi cập nhật đơn');
+                $this->restoreStock($order);
                 [$products] = $this->ensureStockAvailability($items, $warehouseId);
                 $order->orderItems()->delete();
 
@@ -66,7 +89,7 @@ class OrderService
 
             unset($data['warehouse_id']);
 
-            $order->update($data);
+            $this->orderRepository->update($order, $data);
 
             return $order->fresh(['customer', 'warehouse', 'orderItems.product', 'staff']);
         });
@@ -81,8 +104,11 @@ class OrderService
                 ]);
             }
 
-            $this->restoreStock($order, 'Hoàn kho khi hủy đơn');
-            $order->update(['order_status' => OrderStatus::CANCELLED]);
+            $order->loadMissing('orderItems.product');
+
+            $this->orderRepository->update($order, ['order_status' => OrderStatus::CANCELLED]);
+
+            event(new OrderCancelled($order));
 
             return $order->fresh(['customer', 'warehouse', 'orderItems.product', 'staff']);
         });
@@ -91,12 +117,12 @@ class OrderService
     public function deleteOrder(Order $order): void
     {
         DB::transaction(function () use ($order) {
-            $this->restoreStock($order, 'Hoàn kho khi xóa đơn');
-            $order->delete();
+            $this->restoreStock($order);
+            $this->orderRepository->delete($order);
         });
     }
 
-    private function calculateTotalAmount(array $items, $products): float
+    private function calculateTotalAmount(array $items, Collection $products): float
     {
         $totalAmount = 0;
         foreach ($items as $item) {
@@ -114,7 +140,7 @@ class OrderService
             return;
         }
 
-        $isValidCustomer = Customer::query()
+        $isValidCustomer = $this->customerRepository->query()
             ->whereKey($customerId)
             ->where('warehouse_id', $warehouseId)
             ->exists();
@@ -126,31 +152,26 @@ class OrderService
         }
     }
 
-    private function restoreStock(Order $order, string $notePrefix): void
+    private function restoreStock(Order $order): void
     {
         $order->loadMissing('orderItems.product');
 
         foreach ($order->orderItems as $item) {
-            WarehouseStock::query()->firstOrCreate(
-                [
-                    'warehouse_id' => $order->warehouse_id,
-                    'product_id' => $item->product_id,
-                ],
-                ['quantity' => 0]
-            )->increment('quantity', $item->quantity);
+            $stock = $this->warehouseStockRepository->firstOrCreateForProduct(
+                $order->warehouse_id,
+                $item->product_id,
+                0
+            );
+            $stock->increment('quantity', $item->quantity);
 
             $item->product?->increment('stock_quantity', $item->quantity);
 
-            if ($item->product_id) {
-                InventoryTransaction::create([
-                    'warehouse_id' => $order->warehouse_id,
-                    'product_id' => $item->product_id,
-                    'transaction_type' => 'sale_return',
-                    'quantity' => $item->quantity,
-                    'reference_id' => $order->id,
-                    'notes' => $notePrefix.' '.$order->order_code,
-                ]);
-            }
+            event(new StockUpdated(
+                productId: (int) $item->product_id,
+                warehouseId: (int) $order->warehouse_id,
+                quantity: (int) $item->quantity,
+                currentStock: (int) $stock->fresh()->quantity,
+            ));
         }
     }
 
@@ -162,11 +183,7 @@ class OrderService
             ->unique()
             ->values();
 
-        $products = Product::query()
-            ->whereIn('id', $productIds)
-            ->lockForUpdate()
-            ->get()
-            ->keyBy('id');
+        $products = $this->productRepository->getByIdsForUpdate($productIds->all())->keyBy('id');
 
         if ($products->count() !== $productIds->count()) {
             throw ValidationException::withMessages([
@@ -174,11 +191,8 @@ class OrderService
             ]);
         }
 
-        $stocks = WarehouseStock::query()
-            ->where('warehouse_id', $warehouseId)
-            ->whereIn('product_id', $productIds)
-            ->lockForUpdate()
-            ->get()
+        $stocks = $this->warehouseStockRepository
+            ->getByWarehouseAndProducts($warehouseId, $productIds->all())
             ->keyBy('product_id');
 
         foreach ($items as $item) {
@@ -202,7 +216,7 @@ class OrderService
         return [$products, $stocks];
     }
 
-    private function syncOrderItemsAndStock(Order $order, array $items, $products, int $warehouseId, bool $isAdjustment): void
+    private function syncOrderItemsAndStock(Order $order, array $items, Collection $products, int $warehouseId, bool $isAdjustment): void
     {
         foreach ($items as $item) {
             $product = $products->get($item['product_id']);
@@ -216,21 +230,24 @@ class OrderService
                 'total_price' => $lineTotal,
             ]);
 
-            WarehouseStock::query()
+            $stock = $this->warehouseStockRepository
+                ->query()
                 ->where('warehouse_id', $warehouseId)
                 ->where('product_id', $product->id)
-                ->decrement('quantity', $item['quantity']);
+                ->first();
+
+            if ($stock) {
+                $stock->decrement('quantity', $item['quantity']);
+            }
 
             $product->decrement('stock_quantity', $item['quantity']);
 
-            InventoryTransaction::create([
-                'warehouse_id' => $warehouseId,
-                'product_id' => $product->id,
-                'transaction_type' => 'sale',
-                'quantity' => -$item['quantity'],
-                'reference_id' => $order->id,
-                'notes' => ($isAdjustment ? 'Điều chỉnh xuất kho từ đơn hàng ' : 'Xuất kho từ đơn hàng ').$order->order_code,
-            ]);
+            event(new StockUpdated(
+                productId: (int) $product->id,
+                warehouseId: $warehouseId,
+                quantity: -((int) $item['quantity']),
+                currentStock: (int) ($stock?->fresh()?->quantity ?? 0),
+            ));
         }
     }
 }
