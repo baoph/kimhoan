@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -57,5 +58,46 @@ class Order extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function scopePending(Builder $query): Builder
+    {
+        return $query->whereIn('order_status', [OrderStatus::DRAFT, OrderStatus::CONFIRMED]);
+    }
+
+    public function scopeCompleted(Builder $query): Builder
+    {
+        return $query->where('order_status', OrderStatus::COMPLETED);
+    }
+
+    public function scopeByWarehouse(Builder $query, int $warehouseId): Builder
+    {
+        return $query->where('warehouse_id', $warehouseId);
+    }
+
+    public function scopeByCustomer(Builder $query, int $customerId): Builder
+    {
+        return $query->where('customer_id', $customerId);
+    }
+
+    public function scopeToday(Builder $query): Builder
+    {
+        return $query->whereDate('created_at', today());
+    }
+
+    public function scopeThisMonth(Builder $query): Builder
+    {
+        return $query->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year);
+    }
+
+    public function scopeWithFullRelations(Builder $query): Builder
+    {
+        return $query->with([
+            'customer',
+            'warehouse',
+            'orderItems.product',
+            'staff',
+        ]);
     }
 }

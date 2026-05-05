@@ -2,27 +2,37 @@
 
 namespace App\Services;
 
+use App\Events\StockUpdated;
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\WarehouseStock;
+use App\Repositories\ProductRepository;
+use App\Repositories\WarehouseStockRepository;
 use Illuminate\Support\Facades\DB;
 
 class ProductService
 {
+    public function __construct(
+        private readonly ProductRepository $productRepository,
+        private readonly WarehouseStockRepository $warehouseStockRepository,
+    ) {}
+
     public function createProduct(array $data, ?int $warehouseId = null): Product
     {
         return DB::transaction(function () use ($data, $warehouseId) {
-            $product = Product::create($data);
+            /** @var Product $product */
+            $product = $this->productRepository->create($data);
 
             $initialQuantity = (int) ($data['stock_quantity'] ?? 0);
 
-            Warehouse::query()->select('id')->get()->each(function (Warehouse $warehouse) use ($product, $warehouseId, $initialQuantity) {
-                WarehouseStock::query()->firstOrCreate([
-                    'warehouse_id' => $warehouse->id,
-                    'product_id' => $product->id,
-                ], [
-                    'quantity' => $warehouseId === $warehouse->id ? $initialQuantity : 0,
-                ]);
+            Warehouse::query()->select('id')->get()->each(function (Warehouse $warehouse) use ($product, $warehouseId, $initialQuantity): void {
+                $quantity = $warehouseId === $warehouse->id ? $initialQuantity : 0;
+
+                $this->warehouseStockRepository->firstOrCreateForProduct(
+                    $warehouse->id,
+                    $product->id,
+                    $quantity
+                );
             });
 
             return $product;
@@ -31,15 +41,17 @@ class ProductService
 
     public function updateStock(int $productId, int $warehouseId, int $quantity): WarehouseStock
     {
-        $stock = WarehouseStock::query()->firstOrCreate(
-            [
-                'product_id' => $productId,
-                'warehouse_id' => $warehouseId,
-            ],
-            ['quantity' => 0]
-        );
+        $stock = $this->warehouseStockRepository->firstOrCreateForProduct($warehouseId, $productId, 0);
 
+        $beforeQty = (int) $stock->quantity;
         $stock->update(['quantity' => $quantity]);
+
+        event(new StockUpdated(
+            productId: $productId,
+            warehouseId: $warehouseId,
+            quantity: $quantity - $beforeQty,
+            currentStock: $quantity,
+        ));
 
         return $stock->fresh(['product', 'warehouse']);
     }
