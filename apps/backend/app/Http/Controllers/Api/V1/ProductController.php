@@ -91,7 +91,7 @@ class ProductController extends Controller
             'category',
             'brand',
             'orderItems',
-            'warehouseStocks' => fn ($q) => $q->where('warehouse_id', $warehouseId),
+            'warehouseStocks' => fn ($q) => $q->where('warehouse_id', $warehouseId)->with('warehouse'),
         ]);
 
         $stock = $product->warehouseStocks->first();

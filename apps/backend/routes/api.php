@@ -14,9 +14,10 @@ use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('v1')->group(function () {
-    Route::post('/auth/register', [AuthController::class, 'register']);
-    Route::post('/auth/login', [AuthController::class, 'login']);
+Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
+    Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:3,1');
+    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
 
     // Các route chỉ cần đăng nhập, không cần warehouse context.
     Route::middleware('auth:sanctum')->group(function () {

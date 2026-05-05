@@ -8,6 +8,8 @@ use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
@@ -52,6 +54,28 @@ class AuthController extends Controller
             'user' => $user->fresh(),
             'token' => $token,
         ], 'Đăng nhập thành công');
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => ['required', 'email'],
+        ], [
+            'email.required' => 'Email là bắt buộc.',
+            'email.email' => 'Email không hợp lệ.',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse('Dữ liệu gửi lên không hợp lệ', $validator->errors(), 422);
+        }
+
+        $status = Password::sendResetLink($validator->validated());
+
+        if ($status !== Password::RESET_LINK_SENT) {
+            return $this->errorResponse(__($status), null, 422);
+        }
+
+        return $this->successResponse(null, __($status));
     }
 
     public function profile(Request $request)
