@@ -22,7 +22,7 @@ class OrderController extends Controller
         $warehouseId = (int) getCurrentWarehouseId();
 
         $query = Order::query()
-            ->with(['customer', 'staff'])
+            ->with(['customer', 'warehouse', 'orderItems.product', 'staff'])
             ->where('warehouse_id', $warehouseId);
 
         if ($search = $request->string('search')->toString()) {
@@ -53,11 +53,12 @@ class OrderController extends Controller
             unset($data['items']);
 
             $this->ensureCustomerInWarehouse($data['customer_id'] ?? null, $warehouseId);
-            $this->ensureStockAvailability($items, $warehouseId);
+            [$products] = $this->ensureStockAvailability($items, $warehouseId);
 
             $totalAmount = 0;
             foreach ($items as $item) {
-                $price = $item['unit_price'] ?? Product::findOrFail($item['product_id'])->selling_price;
+                $product = $products->get($item['product_id']);
+                $price = $item['unit_price'] ?? $product->selling_price;
                 $totalAmount += $price * $item['quantity'];
             }
 
@@ -70,7 +71,7 @@ class OrderController extends Controller
             $order = Order::create($data);
 
             foreach ($items as $item) {
-                $product = Product::query()->lockForUpdate()->findOrFail($item['product_id']);
+                $product = $products->get($item['product_id']);
                 $unitPrice = $item['unit_price'] ?? $product->selling_price;
                 $lineTotal = $unitPrice * $item['quantity'];
 
@@ -137,13 +138,13 @@ class OrderController extends Controller
                 unset($data['items']);
 
                 $this->restoreStock($order);
-                $this->ensureStockAvailability($items, $warehouseId);
+                [$products] = $this->ensureStockAvailability($items, $warehouseId);
 
                 $order->orderItems()->delete();
 
                 $totalAmount = 0;
                 foreach ($items as $item) {
-                    $product = Product::query()->lockForUpdate()->findOrFail($item['product_id']);
+                    $product = $products->get($item['product_id']);
                     $unitPrice = $item['unit_price'] ?? $product->selling_price;
                     $lineTotal = $unitPrice * $item['quantity'];
                     $totalAmount += $lineTotal;
@@ -294,16 +295,36 @@ class OrderController extends Controller
     /**
      * Không cho phép bán âm kho theo business flow tại kho hiện tại.
      */
-    private function ensureStockAvailability(array $items, int $warehouseId): void
+    private function ensureStockAvailability(array $items, int $warehouseId): array
     {
-        foreach ($items as $item) {
-            $product = Product::query()->findOrFail($item['product_id']);
+        $productIds = collect($items)
+            ->pluck('product_id')
+            ->filter()
+            ->unique()
+            ->values();
 
-            $stock = WarehouseStock::query()
-                ->where('warehouse_id', $warehouseId)
-                ->where('product_id', $item['product_id'])
-                ->lockForUpdate()
-                ->first();
+        $products = Product::query()
+            ->whereIn('id', $productIds)
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+
+        if ($products->count() !== $productIds->count()) {
+            throw ValidationException::withMessages([
+                'items' => ['Một hoặc nhiều sản phẩm không tồn tại.'],
+            ]);
+        }
+
+        $stocks = WarehouseStock::query()
+            ->where('warehouse_id', $warehouseId)
+            ->whereIn('product_id', $productIds)
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('product_id');
+
+        foreach ($items as $item) {
+            $product = $products->get($item['product_id']);
+            $stock = $stocks->get($item['product_id']);
 
             $currentWarehouseQty = (int) ($stock->quantity ?? 0);
             if ($currentWarehouseQty < $item['quantity']) {
@@ -318,5 +339,7 @@ class OrderController extends Controller
                 ]);
             }
         }
+
+        return [$products, $stocks];
     }
 }

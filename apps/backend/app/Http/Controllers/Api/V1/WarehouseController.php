@@ -89,7 +89,7 @@ class WarehouseController extends Controller
             }
 
             $stocks = $warehouse->warehouseStocks()
-                ->with('product')
+                ->with(['product', 'warehouse'])
                 ->when($request->string('search')->toString(), function ($query, $search) {
                     $query->whereHas('product', function ($productQuery) use ($search) {
                         $productQuery->where('name', 'like', "%{$search}%")
