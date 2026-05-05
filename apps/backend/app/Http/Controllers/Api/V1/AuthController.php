@@ -2,60 +2,50 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Resources\UserResource;
-use App\Models\User;
+use App\Services\AuthService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Validator;
+use RuntimeException;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        private readonly AuthService $authService
+    ) {}
+
     public function register(RegisterRequest $request)
     {
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => $request->password,
-            'role' => $request->role ?? UserRole::STAFF->value,
-            'phone' => $request->phone,
-        ]);
-
-        $token = $user->createToken('api-token')->plainTextToken;
+        $result = $this->authService->register($request->validated());
 
         return $this->successResponse([
-            'user' => (new UserResource($user->fresh()))->resolve(),
-            'token' => $token,
+            'user' => (new UserResource($result['user']))->resolve(),
+            'token' => $result['token'],
         ], 'Đăng ký thành công', 201);
     }
 
     public function login(LoginRequest $request)
     {
-        $user = User::where('email', $request->email)->first();
+        try {
+            $result = $this->authService->login($request->email, $request->password);
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
-            return $this->errorResponse('Email hoặc mật khẩu không đúng', null, 401);
+            auth()->setUser($result['user']);
+            logActivity('login', 'Đăng nhập hệ thống', 'auth', $result['user']->id);
+
+            return $this->successResponse([
+                'user' => (new UserResource($result['user']))->resolve(),
+                'token' => $result['token'],
+            ], 'Đăng nhập thành công');
+        } catch (RuntimeException $exception) {
+            $message = $exception->getMessage();
+            $statusCode = str_contains($message, 'khóa') ? 403 : 401;
+
+            return $this->errorResponse($message, null, $statusCode);
         }
-
-        if (! $user->is_active) {
-            return $this->errorResponse('Tài khoản của bạn đã bị khóa', null, 403);
-        }
-
-        $user->update(['last_login_at' => now()]);
-
-        $token = $user->createToken('api-token')->plainTextToken;
-
-        auth()->setUser($user);
-        logActivity('login', 'Đăng nhập hệ thống', 'auth', $user->id);
-
-        return $this->successResponse([
-            'user' => (new UserResource($user->fresh()))->resolve(),
-            'token' => $token,
-        ], 'Đăng nhập thành công');
     }
 
     public function forgotPassword(Request $request)
@@ -71,7 +61,7 @@ class AuthController extends Controller
             return $this->errorResponse('Dữ liệu gửi lên không hợp lệ', $validator->errors(), 422);
         }
 
-        $status = Password::sendResetLink($validator->validated());
+        $status = $this->authService->sendPasswordResetLink($validator->validated()['email']);
 
         if ($status !== Password::RESET_LINK_SENT) {
             return $this->errorResponse(__($status), null, 422);
@@ -87,9 +77,8 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()?->delete();
+        $this->authService->logout($request->user());
 
         return $this->successResponse(null, 'Đăng xuất thành công');
     }
 }
-

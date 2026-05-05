@@ -7,11 +7,16 @@ use App\Http\Requests\Warehouse\StoreWarehouseRequest;
 use App\Http\Requests\Warehouse\UpdateWarehouseRequest;
 use App\Http\Resources\WarehouseResource;
 use App\Models\Warehouse;
+use App\Services\WarehouseService;
 use Illuminate\Http\Request;
 use Throwable;
 
 class WarehouseController extends Controller
 {
+    public function __construct(
+        private readonly WarehouseService $warehouseService
+    ) {}
+
     public function index(Request $request)
     {
         try {
@@ -31,7 +36,7 @@ class WarehouseController extends Controller
     public function store(StoreWarehouseRequest $request)
     {
         try {
-            $warehouse = Warehouse::create($request->validated());
+            $warehouse = $this->warehouseService->createWarehouse($request->validated());
 
             return $this->successResponse((new WarehouseResource($warehouse))->resolve(), 'Tạo kho thành công', 201);
         } catch (Throwable $e) {
@@ -59,9 +64,9 @@ class WarehouseController extends Controller
                 return $response;
             }
 
-            $warehouse->update($request->validated());
+            $warehouse = $this->warehouseService->updateWarehouse($warehouse, $request->validated());
 
-            return $this->successResponse((new WarehouseResource($warehouse->fresh()))->resolve(), 'Cập nhật kho thành công');
+            return $this->successResponse((new WarehouseResource($warehouse))->resolve(), 'Cập nhật kho thành công');
         } catch (Throwable $e) {
             return $this->errorResponse('Không thể cập nhật kho', ['error' => $e->getMessage()], 500);
         }

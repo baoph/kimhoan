@@ -8,12 +8,15 @@ use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\UserService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
+    public function __construct(
+        private readonly UserService $userService
+    ) {}
+
     public function index(Request $request)
     {
         $query = User::query()->with('warehouses');
@@ -54,26 +57,11 @@ class UserController extends Controller
         $payload = $request->validated();
 
         try {
-            $user = DB::transaction(function () use ($payload) {
-                $user = User::query()->create([
-                    'name' => $payload['name'],
-                    'email' => $payload['email'],
-                    'password' => Hash::make($payload['password']),
-                    'role' => $payload['role'],
-                    'phone' => $payload['phone'] ?? null,
-                    'is_active' => $payload['is_active'] ?? true,
-                ]);
+            $user = $this->userService->createUser($payload);
 
-                if (! empty($payload['warehouse_ids'])) {
-                    $user->warehouses()->sync($payload['warehouse_ids']);
-                }
+            logActivity('create_user', "Tạo người dùng: {$user->name}", 'users', $user->id);
 
-                logActivity('create_user', "Tạo người dùng: {$user->name}", 'users', $user->id);
-
-                return $user;
-            });
-
-            return $this->successResponse((new UserResource($user->load('warehouses')))->resolve(), 'Tạo người dùng thành công', 201);
+            return $this->successResponse((new UserResource($user))->resolve(), 'Tạo người dùng thành công', 201);
         } catch (\Throwable $exception) {
             return $this->errorResponse('Không thể tạo người dùng: '.$exception->getMessage(), null, 500);
         }
@@ -89,48 +77,44 @@ class UserController extends Controller
         $payload = $request->validated();
 
         try {
-            DB::transaction(function () use ($payload, $user) {
-                $trackedFields = ['name', 'email', 'role', 'phone', 'is_active'];
-                $changes = [];
+            $trackedFields = ['name', 'email', 'role', 'phone', 'is_active'];
+            $changes = [];
 
-                foreach ($trackedFields as $field) {
-                    if (! array_key_exists($field, $payload)) {
-                        continue;
-                    }
-
-                    $oldValue = $field === 'role'
-                        ? ($user->role?->value ?? null)
-                        : $user->{$field};
-                    $newValue = $payload[$field];
-
-                    if ($oldValue != $newValue) {
-                        $changes[$field] = [
-                            'old' => $oldValue,
-                            'new' => $newValue,
-                        ];
-                    }
+            foreach ($trackedFields as $field) {
+                if (! array_key_exists($field, $payload)) {
+                    continue;
                 }
 
-                $user->update(collect($payload)->only($trackedFields)->toArray());
+                $oldValue = $field === 'role'
+                    ? ($user->role?->value ?? null)
+                    : $user->{$field};
+                $newValue = $payload[$field];
 
-                if (array_key_exists('warehouse_ids', $payload)) {
-                    $oldWarehouseIds = $user->warehouses()->pluck('warehouses.id')->sort()->values()->toArray();
-                    $newWarehouseIds = collect($payload['warehouse_ids'] ?? [])->map(fn ($id) => (int) $id)->sort()->values()->toArray();
-
-                    if ($oldWarehouseIds !== $newWarehouseIds) {
-                        $changes['warehouse_ids'] = [
-                            'old' => $oldWarehouseIds,
-                            'new' => $newWarehouseIds,
-                        ];
-                    }
-
-                    $user->warehouses()->sync($newWarehouseIds);
+                if ($oldValue != $newValue) {
+                    $changes[$field] = [
+                        'old' => $oldValue,
+                        'new' => $newValue,
+                    ];
                 }
+            }
 
-                logActivity('update_user', "Cập nhật người dùng: {$user->name}", 'users', $user->id, $changes ?: null);
-            });
+            if (array_key_exists('warehouse_ids', $payload)) {
+                $oldWarehouseIds = $user->warehouses()->pluck('warehouses.id')->sort()->values()->toArray();
+                $newWarehouseIds = collect($payload['warehouse_ids'] ?? [])->map(fn ($id) => (int) $id)->sort()->values()->toArray();
 
-            return $this->successResponse((new UserResource($user->fresh()->load('warehouses')))->resolve(), 'Cập nhật người dùng thành công');
+                if ($oldWarehouseIds !== $newWarehouseIds) {
+                    $changes['warehouse_ids'] = [
+                        'old' => $oldWarehouseIds,
+                        'new' => $newWarehouseIds,
+                    ];
+                }
+            }
+
+            $user = $this->userService->updateUser($user, $payload);
+
+            logActivity('update_user', "Cập nhật người dùng: {$user->name}", 'users', $user->id, $changes ?: null);
+
+            return $this->successResponse((new UserResource($user))->resolve(), 'Cập nhật người dùng thành công');
         } catch (\Throwable $exception) {
             return $this->errorResponse('Không thể cập nhật người dùng: '.$exception->getMessage(), null, 500);
         }
@@ -161,9 +145,7 @@ class UserController extends Controller
             'new_password.min' => 'Mật khẩu mới phải có ít nhất 6 ký tự',
         ]);
 
-        $user->update([
-            'password' => Hash::make($request->input('new_password')),
-        ]);
+        $this->userService->changePassword($user, $request->input('new_password'));
 
         logActivity('reset_password', "Đặt lại mật khẩu cho: {$user->name}", 'users', $user->id);
 
@@ -208,13 +190,13 @@ class UserController extends Controller
             ->values()
             ->all();
 
-        $user->warehouses()->sync($warehouseIds);
+        $user = $this->userService->updateUser($user, ['warehouse_ids' => $warehouseIds]);
 
         logActivity('assign_warehouses', "Phân quyền kho cho: {$user->name}", 'users', $user->id, [
             'warehouse_ids' => $warehouseIds,
         ]);
 
-        return $this->successResponse((new UserResource($user->fresh()->load('warehouses')))->resolve(), 'Phân quyền kho thành công');
+        return $this->successResponse((new UserResource($user))->resolve(), 'Phân quyền kho thành công');
     }
 
     public function activityLogs(User $user, Request $request)

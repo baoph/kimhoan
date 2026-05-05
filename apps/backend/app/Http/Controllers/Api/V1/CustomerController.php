@@ -7,10 +7,15 @@ use App\Http\Requests\Customer\StoreCustomerRequest;
 use App\Http\Requests\Customer\UpdateCustomerRequest;
 use App\Http\Resources\CustomerResource;
 use App\Models\Customer;
+use App\Services\CustomerService;
 use Illuminate\Http\Request;
 
 class CustomerController extends Controller
 {
+    public function __construct(
+        private readonly CustomerService $customerService
+    ) {}
+
     public function index(Request $request)
     {
         $warehouseId = (int) getCurrentWarehouseId();
@@ -41,7 +46,7 @@ class CustomerController extends Controller
 
     public function store(StoreCustomerRequest $request)
     {
-        $customer = Customer::create($request->validated() + [
+        $customer = $this->customerService->createCustomer($request->validated() + [
             'warehouse_id' => getCurrentWarehouseId(),
             'created_by' => $request->user()?->id,
         ]);
@@ -59,8 +64,11 @@ class CustomerController extends Controller
             return $response;
         }
 
+        $customer = $this->customerService->getCustomerWithOrders((int) $customer->id)
+            ->load(['customerGroup', 'creator', 'warehouse']);
+
         return $this->successResponse(
-            (new CustomerResource($customer->load(['customerGroup', 'creator', 'orders', 'warehouse'])))->resolve(),
+            (new CustomerResource($customer))->resolve(),
             'Lấy chi tiết khách hàng thành công'
         );
     }
@@ -74,10 +82,11 @@ class CustomerController extends Controller
         $data = $request->validated();
         unset($data['warehouse_id']);
 
-        $customer->update($data);
+        $customer = $this->customerService->updateCustomer($customer, $data)
+            ->load(['customerGroup', 'creator', 'warehouse']);
 
         return $this->successResponse(
-            (new CustomerResource($customer->fresh()->load(['customerGroup', 'creator', 'warehouse'])))->resolve(),
+            (new CustomerResource($customer))->resolve(),
             'Cập nhật khách hàng thành công'
         );
     }

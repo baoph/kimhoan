@@ -28,6 +28,33 @@ class WarehouseStockRepository extends BaseRepository
             ->get();
     }
 
+    public function getByWarehouse(int $warehouseId, array $relations = []): Collection
+    {
+        return $this->query()
+            ->with($relations)
+            ->where('warehouse_id', $warehouseId)
+            ->orderByDesc('quantity')
+            ->get();
+    }
+
+    public function getLowStock(int $warehouseId, int $threshold = 10, array $relations = []): Collection
+    {
+        return $this->query()
+            ->with($relations)
+            ->where('warehouse_id', $warehouseId)
+            ->where('quantity', '<=', $threshold)
+            ->orderBy('quantity')
+            ->get();
+    }
+
+    public function getByProductAndWarehouse(int $productId, int $warehouseId): ?WarehouseStock
+    {
+        return $this->query()
+            ->where('product_id', $productId)
+            ->where('warehouse_id', $warehouseId)
+            ->first();
+    }
+
     public function firstOrCreateForProduct(int $warehouseId, int $productId, int $defaultQty = 0): WarehouseStock
     {
         return $this->query()->firstOrCreate(

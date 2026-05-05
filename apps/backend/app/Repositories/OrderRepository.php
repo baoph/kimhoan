@@ -47,6 +47,14 @@ class OrderRepository extends BaseRepository
             ->get();
     }
 
+    public function getTodayOrders(int $warehouseId): Collection
+    {
+        return $this->query()
+            ->byWarehouse($warehouseId)
+            ->where('order_date', '>=', now()->startOfDay())
+            ->get();
+    }
+
     public function getPendingOrders(int $warehouseId): Collection
     {
         return $this->query()
