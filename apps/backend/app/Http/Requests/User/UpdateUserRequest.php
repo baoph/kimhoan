@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\User;
 
+use App\Enums\UserRole;
 use App\Http\Requests\BaseApiRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateUserRequest extends BaseApiRequest
 {
@@ -13,7 +15,7 @@ class UpdateUserRequest extends BaseApiRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'email' => ['sometimes', 'required', 'email', 'max:255', 'unique:users,email,'.$userId],
-            'role' => ['sometimes', 'required', 'in:admin,manager,staff'],
+            'role' => ['sometimes', 'required', Rule::in(UserRole::values())],
             'warehouse_ids' => ['nullable', 'array'],
             'warehouse_ids.*' => ['nullable', 'exists:warehouses,id'],
             'is_active' => ['nullable', 'boolean'],

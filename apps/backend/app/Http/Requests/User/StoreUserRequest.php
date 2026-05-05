@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\User;
 
+use App\Enums\UserRole;
 use App\Http\Requests\BaseApiRequest;
+use Illuminate\Validation\Rule;
 
 class StoreUserRequest extends BaseApiRequest
 {
@@ -12,7 +14,7 @@ class StoreUserRequest extends BaseApiRequest
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6'],
-            'role' => ['required', 'in:admin,manager,staff'],
+            'role' => ['required', Rule::in(UserRole::values())],
             'warehouse_ids' => ['nullable', 'array'],
             'warehouse_ids.*' => ['nullable', 'exists:warehouses,id'],
             'is_active' => ['nullable', 'boolean'],

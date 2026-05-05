@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\StoreCustomerRequest;
 use App\Http\Requests\Customer\UpdateCustomerRequest;
+use App\Http\Resources\CustomerResource;
 use App\Models\Customer;
 use Illuminate\Http\Request;
 
@@ -33,6 +34,7 @@ class CustomerController extends Controller
 
         $perPage = min((int) $request->input('per_page', 15), 100);
         $customers = $query->latest()->paginate($perPage);
+        $customers->setCollection(collect(CustomerResource::collection($customers->getCollection())->resolve()));
 
         return $this->paginatedResponse($customers, 'Lấy danh sách khách hàng thành công');
     }
@@ -45,7 +47,7 @@ class CustomerController extends Controller
         ]);
 
         return $this->successResponse(
-            $customer->load(['customerGroup', 'creator', 'warehouse']),
+            (new CustomerResource($customer->load(['customerGroup', 'creator', 'warehouse'])))->resolve(),
             'Tạo khách hàng thành công',
             201
         );
@@ -58,7 +60,7 @@ class CustomerController extends Controller
         }
 
         return $this->successResponse(
-            $customer->load(['customerGroup', 'creator', 'orders', 'warehouse']),
+            (new CustomerResource($customer->load(['customerGroup', 'creator', 'orders', 'warehouse'])))->resolve(),
             'Lấy chi tiết khách hàng thành công'
         );
     }
@@ -75,7 +77,7 @@ class CustomerController extends Controller
         $customer->update($data);
 
         return $this->successResponse(
-            $customer->load(['customerGroup', 'creator', 'warehouse']),
+            (new CustomerResource($customer->fresh()->load(['customerGroup', 'creator', 'warehouse'])))->resolve(),
             'Cập nhật khách hàng thành công'
         );
     }

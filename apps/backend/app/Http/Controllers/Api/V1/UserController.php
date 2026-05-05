@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
+use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -42,6 +44,7 @@ class UserController extends Controller
 
         $perPage = min((int) $request->input('per_page', 15), 100);
         $users = $query->latest()->paginate($perPage);
+        $users->setCollection(collect(UserResource::collection($users->getCollection())->resolve()));
 
         return $this->paginatedResponse($users, 'Lấy danh sách người dùng thành công');
     }
@@ -70,7 +73,7 @@ class UserController extends Controller
                 return $user;
             });
 
-            return $this->successResponse($user->load('warehouses'), 'Tạo người dùng thành công', 201);
+            return $this->successResponse((new UserResource($user->load('warehouses')))->resolve(), 'Tạo người dùng thành công', 201);
         } catch (\Throwable $exception) {
             return $this->errorResponse('Không thể tạo người dùng: '.$exception->getMessage(), null, 500);
         }
@@ -78,7 +81,7 @@ class UserController extends Controller
 
     public function show(User $user)
     {
-        return $this->successResponse($user->load('warehouses'), 'Lấy thông tin người dùng thành công');
+        return $this->successResponse((new UserResource($user->load('warehouses')))->resolve(), 'Lấy thông tin người dùng thành công');
     }
 
     public function update(UpdateUserRequest $request, User $user)
@@ -91,10 +94,19 @@ class UserController extends Controller
                 $changes = [];
 
                 foreach ($trackedFields as $field) {
-                    if (array_key_exists($field, $payload) && $user->{$field} != $payload[$field]) {
+                    if (! array_key_exists($field, $payload)) {
+                        continue;
+                    }
+
+                    $oldValue = $field === 'role'
+                        ? ($user->role?->value ?? null)
+                        : $user->{$field};
+                    $newValue = $payload[$field];
+
+                    if ($oldValue != $newValue) {
                         $changes[$field] = [
-                            'old' => $user->{$field},
-                            'new' => $payload[$field],
+                            'old' => $oldValue,
+                            'new' => $newValue,
                         ];
                     }
                 }
@@ -118,7 +130,7 @@ class UserController extends Controller
                 logActivity('update_user', "Cập nhật người dùng: {$user->name}", 'users', $user->id, $changes ?: null);
             });
 
-            return $this->successResponse($user->fresh()->load('warehouses'), 'Cập nhật người dùng thành công');
+            return $this->successResponse((new UserResource($user->fresh()->load('warehouses')))->resolve(), 'Cập nhật người dùng thành công');
         } catch (\Throwable $exception) {
             return $this->errorResponse('Không thể cập nhật người dùng: '.$exception->getMessage(), null, 500);
         }
@@ -126,7 +138,7 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
-        if ($user->isAdmin() && User::query()->where('role', 'admin')->count() === 1) {
+        if ($user->isAdmin() && User::query()->where('role', UserRole::ADMIN->value)->count() === 1) {
             return $this->errorResponse('Không thể xóa Admin cuối cùng trong hệ thống', null, 400);
         }
 
@@ -202,7 +214,7 @@ class UserController extends Controller
             'warehouse_ids' => $warehouseIds,
         ]);
 
-        return $this->successResponse($user->fresh()->load('warehouses'), 'Phân quyền kho thành công');
+        return $this->successResponse((new UserResource($user->fresh()->load('warehouses')))->resolve(), 'Phân quyền kho thành công');
     }
 
     public function activityLogs(User $user, Request $request)

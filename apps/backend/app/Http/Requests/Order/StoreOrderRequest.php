@@ -2,7 +2,10 @@
 
 namespace App\Http\Requests\Order;
 
+use App\Enums\OrderStatus;
+use App\Enums\PaymentStatus;
 use App\Http\Requests\BaseApiRequest;
+use Illuminate\Validation\Rule;
 
 class StoreOrderRequest extends BaseApiRequest
 {
@@ -14,8 +17,8 @@ class StoreOrderRequest extends BaseApiRequest
             'staff_id' => ['nullable', 'exists:users,id'],
             'order_date' => ['required', 'date'],
             'discount' => ['nullable', 'numeric', 'min:0'],
-            'payment_status' => ['nullable', 'in:pending,paid,partial,refunded'],
-            'order_status' => ['nullable', 'in:draft,confirmed,completed,cancelled,returned'],
+            'payment_status' => ['nullable', Rule::in(PaymentStatus::values())],
+            'order_status' => ['nullable', Rule::in(OrderStatus::values())],
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'exists:products,id'],
